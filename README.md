@@ -1,4 +1,6 @@
 # SoccerScout
+The long-term goal is to implement an ML model to the data set to constantly evaluate algorithm performance in predicting undervalued and overvalued players.  
+
 
 Using API: FBref
 
