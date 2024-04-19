@@ -9,6 +9,10 @@ In /src file run python Main.py
 
 ## Resources:
 
+https://medium.com/@ricardoandreom/how-to-scrape-and-personalize-data-from-fbref-with-python-a-guide-to-unlocking-football-insights-7e623607afca
+
+https://ctomashot.medium.com/how-i-scraped-an-api-for-my-soccer-scouting-app-c67df68da6ca
+
 https://builtin.com/data-science/tour-top-10-algorithms-machine-learning-newbies
 
 ## Potential Other API's:
