@@ -5,7 +5,8 @@
 - Using API: FBref
 
 ## To run:
-In /src file run python Main.py
+In /src file run python app.py
+In browser of choice, go to http://127.0.0.1:5000/players
 
 ## Resources:
 
