@@ -57,26 +57,64 @@ stat_weights = {
 
 def calculate_player_score(player_df):
     """Calculate a player's score based on weighted statistics"""
-    score = 0
+    # Initialize score columns
+    player_df['total_score'] = 0
     
-    # Apply weights to each statistic
-    for stat, weight in stat_weights.items():
-        if stat in player_df.columns:
-            # Normalize the stat value using min-max scaling within its category
-            min_val = player_df[stat].min()
-            max_val = player_df[stat].max()
-            
-            # Avoid division by zero
-            if max_val == min_val:
-                normalized_value = 0
-            else:
-                normalized_value = (player_df[stat] - min_val) / (max_val - min_val)
-            
-            # Add weighted statistic to score
-            player_df[f'{stat}_weighted'] = normalized_value * weight
-            score += player_df[f'{stat}_weighted']
+    # Group statistics by category for more balanced scoring
+    stat_categories = {
+        'offensive': ['goals', 'assists', 'xg', 'xa', 'npxg', 'sca', 'gca', 
+                    'shots', 'shots_on_target', 'penalty_box_touches'],
+        'possession': ['passes_completed', 'pass_completion_pct', 'progressive_passes',
+                    'progressive_carries', 'progressive_passes_received', 
+                    'dribbles_completed'],
+        'defensive': ['tackles', 'tackles_won', 'interceptions', 'blocks', 
+                    'pressures', 'pressure_success_rate', 'aerial_duels_won'],
+        'per90': ['goals_per90', 'assists_per90', 'xg_per90', 'xa_per90', 
+                'npxg_per90', 'sca_per90', 'gca_per90']
+    }
     
-    return score
+    # Calculate score for each category separately
+    for category, stats in stat_categories.items():
+        category_score = 0
+        available_stats = [s for s in stats if s in player_df.columns]
+        
+        if not available_stats:
+            continue
+            
+        # Apply weights to each statistic in this category
+        for stat in available_stats:
+            if stat in stat_weights:
+                # Normalize the stat value using min-max scaling within its category
+                min_val = player_df[stat].min()
+                max_val = player_df[stat].max()
+                
+                # Avoid division by zero
+                if max_val == min_val:
+                    normalized_value = 0
+                else:
+                    normalized_value = (player_df[stat] - min_val) / (max_val - min_val)
+                
+                # Add weighted statistic to category score
+                weight = stat_weights.get(stat, 0.5)  # Default weight if not specified
+                player_df[f'{stat}_weighted'] = normalized_value * weight
+                category_score += player_df[f'{stat}_weighted']
+        
+        # Store category score
+        if len(available_stats) > 0:
+            # Normalize by number of stats to avoid bias toward categories with more stats
+            player_df[f'{category}_score'] = category_score / len(available_stats) * 10
+            player_df['total_score'] += player_df[f'{category}_score']
+    
+    # Scale the final score to a 0-100 range for easier interpretation
+    min_score = player_df['total_score'].min()
+    max_score = player_df['total_score'].max()
+    
+    if max_score > min_score:
+        player_df['performance_score'] = 50 + 50 * (player_df['total_score'] - min_score) / (max_score - min_score)
+    else:
+        player_df['performance_score'] = 50
+    
+    return player_df['performance_score']
 
 def calculate_market_value_ratio(row):
     """Calculate ratio of performance score to market value
@@ -89,9 +127,15 @@ def calculate_market_value_ratio(row):
     if row['market_value'] == 0:  # Avoid division by zero
         return 0
     
-    # Calculate ratio (higher ratio = potentially undervalued player)
-    # Normalize market value to millions for more intuitive ratios
-    return row['performance_score'] / (row['market_value'] / 1000000)
+    # Calculate expected market value based on performance score
+    # Use a baseline of €1M per point for performance scores around 50
+    expected_value = (row['performance_score'] ** 1.5) * 200000
+    
+    # Ratio of expected value to actual market value
+    # Values > 1 mean player is potentially undervalued
+    ratio = expected_value / row['market_value']
+    
+    return ratio
 
 @app.route('/players')
 def get_players():
@@ -162,11 +206,11 @@ def get_top_undervalued():
     player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
     
     # Consider a player undervalued if:
-    # 1. Their value ratio is greater than 2.0 (same as the frontend threshold)
+    # 1. Their value ratio is greater than 1.5 (same as the frontend threshold)
     # 2. They have at least average performance
     avg_performance = player_data['performance_score'].mean()
     undervalued = player_data[
-        (player_data['value_ratio'] > 2.0) & 
+        (player_data['value_ratio'] > 1.5) & 
         (player_data['performance_score'] >= avg_performance)
     ]
     
@@ -215,6 +259,214 @@ def get_stats_distribution():
             }
     
     return jsonify(result)
+
+@app.route('/ml-predictions')
+def get_ml_predictions():
+    """Get player market value predictions from ML model"""
+    try:
+        # Import ML module
+        import ml_model
+        from flask import request
+        
+        # Get query parameters
+        position_specific = request.args.get('position_specific', 'true').lower() == 'true'
+        age_adjusted = request.args.get('age_adjusted', 'true').lower() == 'true'
+        
+        # Get predictions with specified parameters
+        predictions = ml_model.predict_current_values(
+            position_specific=position_specific,
+            age_adjusted=age_adjusted
+        )
+        
+        if predictions is None:
+            return jsonify({"error": "Failed to generate predictions"}), 500
+            
+        # Convert to JSON
+        predictions_json = predictions.to_dict(orient='records')
+        
+        # Add metadata about the prediction settings
+        response = {
+            "settings": {
+                "position_specific": position_specific,
+                "age_adjusted": age_adjusted
+            },
+            "predictions": predictions_json
+        }
+        
+        return jsonify(response)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error generating predictions", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/train-model')
+def train_model():
+    """Train the ML model and return performance metrics"""
+    try:
+        # Import ML module
+        import ml_model
+        
+        # Create model
+        model = ml_model.PlayerValueModel()
+        
+        # Train model
+        metrics = model.train()
+        
+        if metrics is None:
+            return jsonify({"error": "Failed to train model"}), 500
+            
+        # Get model performance by season
+        performance = model.analyze_model_performance(plot=True)
+        
+        if performance is not None:
+            performance_json = performance.to_dict(orient='records')
+        else:
+            performance_json = []
+        
+        # Return metrics and performance
+        result = {
+            "training_metrics": metrics,
+            "season_performance": performance_json
+        }
+        
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error training model", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/compare-models')
+def compare_models():
+    """Train and compare multiple ML models"""
+    try:
+        # Import ML module
+        import ml_model
+        
+        # Train and compare models
+        comparison = ml_model.train_multiple_models()
+        
+        if comparison is None:
+            return jsonify({"error": "Failed to compare models"}), 500
+            
+        # Convert to JSON
+        result = comparison.to_dict()
+        
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error comparing models", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/update-weights')
+def update_weights():
+    """Update statistical weights based on ML model feature importance"""
+    try:
+        # Import ML module
+        import ml_model
+        
+        # Update weights
+        success = ml_model.update_stat_weights_from_model()
+        
+        if not success:
+            return jsonify({"error": "Failed to update weights"}), 500
+            
+        return jsonify({"success": True, "message": "Weights updated successfully"})
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error updating weights", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/compare-players')
+def compare_players():
+    """Compare players within the same position and age group"""
+    try:
+        # Import ML module and request
+        import ml_model
+        from flask import request
+        
+        # Get query parameters
+        position = request.args.get('position')
+        age_group = request.args.get('age_group')
+        player_id = request.args.get('player_id')
+        
+        if not (position or age_group or player_id):
+            return jsonify({"error": "At least one filter parameter (position, age_group, or player_id) is required"}), 400
+        
+        # Get predictions with position and age adjustments
+        predictions = ml_model.predict_current_values(
+            position_specific=True,
+            age_adjusted=True
+        )
+        
+        if predictions is None:
+            return jsonify({"error": "Failed to generate predictions"}), 500
+            
+        # Filter by position category if specified
+        if position:
+            if position in predictions['position'].values:
+                # Exact position match
+                predictions = predictions[predictions['position'] == position]
+            elif position in predictions['position_category'].values:
+                # Position category match
+                predictions = predictions[predictions['position_category'] == position]
+            else:
+                return jsonify({"error": f"Position '{position}' not found"}), 404
+        
+        # Filter by age group if specified
+        if age_group:
+            if age_group not in predictions['age_group'].values:
+                return jsonify({"error": f"Age group '{age_group}' not found"}), 404
+            predictions = predictions[predictions['age_group'] == age_group]
+        
+        # Get reference player if specified
+        reference_player = None
+        if player_id:
+            try:
+                player_id = int(player_id)
+                reference_player = predictions[predictions['id'] == player_id]
+                if reference_player.empty:
+                    return jsonify({"error": f"Player with ID {player_id} not found"}), 404
+                reference_player = reference_player.iloc[0].to_dict()
+            except ValueError:
+                return jsonify({"error": f"Invalid player ID: {player_id}"}), 400
+        
+        # Sort by value ratio (most undervalued first)
+        sorted_players = predictions.sort_values('value_ratio', ascending=False)
+        
+        # Convert to JSON
+        players_json = sorted_players.to_dict(orient='records')
+        
+        # Create response
+        response = {
+            "filters": {
+                "position": position,
+                "age_group": age_group,
+                "player_id": player_id
+            },
+            "reference_player": reference_player,
+            "players": players_json
+        }
+        
+        return jsonify(response)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error comparing players", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 
 if __name__ == '__main__':
     # Create database if it doesn't exist

@@ -149,7 +149,7 @@ def generate_random_player_data():
     
     return players
 
-def generate_player_stats(player_id, seasons=["2021-2022", "2022-2023", "2023-2024"]):
+def generate_player_stats(player_id, seasons=["2018-2019", "2019-2020", "2020-2021", "2021-2022", "2022-2023", "2023-2024"]):
     """Generate realistic player statistics for simulation"""
     stats_list = []
     
@@ -395,13 +395,26 @@ def is_database_populated():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM players")
         count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM player_stats")
+        stats_count = cursor.fetchone()[0]
         conn.close()
-        return count > 0
+        return count > 0 and stats_count > 0
     except sqlite3.Error:
         return False
 
+def reset_database():
+    """Drop and recreate the database from scratch"""
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+    create_database()
+    populate_database()
+    print("Database reset and populated with simulated player data")
+
 # Create and populate the database if needed
 if not is_database_populated():
+    # Remove existing database if it exists but is empty or incomplete
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
     create_database()
     populate_database()
     print("Database created and populated with simulated player data")

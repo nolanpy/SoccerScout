@@ -332,15 +332,15 @@
     
     // Get value indicator class
     function getValueIndicatorClass(ratio) {
-      if (ratio > 2) return 'undervalued';
-      if (ratio < 0.5) return 'overvalued';
+      if (ratio > 1.5) return 'undervalued';
+      if (ratio < 0.7) return 'overvalued';
       return 'fairly-valued';
     }
     
     // Get value text
     function getValueText(ratio) {
-      if (ratio > 2) return 'Undervalued';
-      if (ratio < 0.5) return 'Overvalued';
+      if (ratio > 1.5) return 'Undervalued';
+      if (ratio < 0.7) return 'Overvalued';
       return 'Fair Value';
     }
     
