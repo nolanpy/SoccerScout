@@ -79,12 +79,19 @@ def calculate_player_score(player_df):
     return score
 
 def calculate_market_value_ratio(row):
-    """Calculate ratio of performance score to market value"""
+    """Calculate ratio of performance score to market value
+    
+    A higher ratio means the player is potentially undervalued:
+    - ratio > 2.0: Significantly undervalued 
+    - 0.5 <= ratio <= 2.0: Fair value
+    - ratio < 0.5: Overvalued
+    """
     if row['market_value'] == 0:  # Avoid division by zero
         return 0
     
     # Calculate ratio (higher ratio = potentially undervalued player)
-    return row['performance_score'] / (row['market_value'] / 1000000)  # Normalize by millions
+    # Normalize market value to millions for more intuitive ratios
+    return row['performance_score'] / (row['market_value'] / 1000000)
 
 @app.route('/players')
 def get_players():
@@ -154,10 +161,19 @@ def get_top_undervalued():
     # Calculate market value ratio (higher = more undervalued)
     player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
     
-    # Get players with good performance and high value ratio (undervalued)
-    # Filter to players with at least average performance
+    # Consider a player undervalued if:
+    # 1. Their value ratio is greater than 2.0 (same as the frontend threshold)
+    # 2. They have at least average performance
     avg_performance = player_data['performance_score'].mean()
-    undervalued = player_data[player_data['performance_score'] >= avg_performance]
+    undervalued = player_data[
+        (player_data['value_ratio'] > 2.0) & 
+        (player_data['performance_score'] >= avg_performance)
+    ]
+    
+    # If we don't have enough players that meet the strict criteria, fall back to top value ratios
+    if len(undervalued) < 5:
+        # Just get players with above average performance, sorted by value ratio
+        undervalued = player_data[player_data['performance_score'] >= avg_performance]
     
     # Sort by value ratio (highest first - most undervalued)
     top_undervalued = undervalued.sort_values(by='value_ratio', ascending=False).head(10)

@@ -2,9 +2,17 @@
 
 SoccerScout is a tool for soccer clubs to identify undervalued and overvalued players by analyzing advanced statistics and comparing predicted values to actual market values.
 
+## Next Steps
+
+[] Add ML models to predict market values
+[] Compare predicted vs. actual values
+[] Track prediction accuracy over time
+[] Add more visualization tools
+
 ## Overview
 
 This application analyzes player performance using a comprehensive set of advanced statistics including:
+
 - Expected goals (xG) and assists (xA)
 - Shot-creating actions (SCA) and goal-creating actions (GCA)
 - Progressive passes and carries
@@ -41,11 +49,13 @@ The current version uses simulated player data in a SQLite database, with plans 
 ## Setup and Running
 
 1. Install dependencies:
+
    ```
    pip install flask flask_cors pandas
    ```
 
 2. Run the application:
+
    ```
    cd src
    python app.py
@@ -65,13 +75,15 @@ The current version uses simulated player data in a SQLite database, with plans 
 
 ## Potential Future Data Sources:
 
-Paid:  
-- Wyscout https://www.hudl.com/products/wyscout  
+Paid:
+
+- Wyscout https://www.hudl.com/products/wyscout
 - Opta Sports API
 
-Free:  
+Free:
+
 - FBref
-- Understat  
+- Understat
 - Whoscored
 
 ## Resources:

@@ -360,7 +360,21 @@ def get_players_with_stats(season="2023-2024"):
     conn = sqlite3.connect(DB_PATH)
     
     query = f'''
-    SELECT p.*, ps.*
+    SELECT 
+        p.id, p.name, p.age, p.nationality, p.position, p.club, p.league, 
+        p.height, p.weight, p.preferred_foot, p.market_value, p.last_updated,
+        ps.goals, ps.assists, ps.xg, ps.xa, ps.npxg, ps.sca, ps.gca,
+        ps.shots, ps.shots_on_target, ps.progressive_carries, ps.progressive_passes,
+        ps.penalty_box_touches, ps.passes_completed, ps.passes_attempted,
+        ps.pass_completion_pct, ps.progressive_passes_received,
+        ps.final_third_passes_completed, ps.final_third_passes_attempted,
+        ps.dribbles_completed, ps.dribbles_attempted, ps.ball_recoveries,
+        ps.tackles, ps.tackles_won, ps.interceptions, ps.blocks, ps.clearances,
+        ps.pressures, ps.pressure_success_rate, ps.aerial_duels_won,
+        ps.aerial_duels_total, ps.minutes_played, ps.games_played,
+        ps.distance_covered, ps.high_intensity_runs, ps.yellow_cards, ps.red_cards,
+        ps.goals_per90, ps.assists_per90, ps.xg_per90, ps.xa_per90,
+        ps.npxg_per90, ps.sca_per90, ps.gca_per90
     FROM players p
     JOIN player_stats ps ON p.id = ps.player_id
     WHERE ps.season = '{season}'
@@ -370,7 +384,24 @@ def get_players_with_stats(season="2023-2024"):
     conn.close()
     return df
 
-# Initialize database if it doesn't exist
-if not os.path.exists(DB_PATH):
+# Initialize database if it doesn't exist or is empty
+def is_database_populated():
+    """Check if the database has data in the players table"""
+    if not os.path.exists(DB_PATH):
+        return False
+        
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM players")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    except sqlite3.Error:
+        return False
+
+# Create and populate the database if needed
+if not is_database_populated():
     create_database()
     populate_database()
+    print("Database created and populated with simulated player data")
