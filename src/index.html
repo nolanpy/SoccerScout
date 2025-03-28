@@ -1,27 +1,586 @@
-<!-- Frontend (HTML) -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Player Scores</title>
-  </head>
-  <body>
-    <h1>Player Scores</h1>
-    <ul id="player-list"></ul>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoccerScout - Player Analysis</title>
+  <style>
+    :root {
+      --primary: #3498db;
+      --secondary: #2c3e50;
+      --success: #2ecc71;
+      --danger: #e74c3c;
+      --warning: #f39c12;
+      --light: #f8f9fa;
+      --dark: #343a40;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f7fa;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .header {
+      background-color: var(--dark);
+      color: white;
+      padding: 15px 0;
+      text-align: center;
+      margin-bottom: 20px;
+      border-bottom: 4px solid var(--primary);
+    }
+    
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      border-radius: 5px 5px 0 0;
+      transition: all 0.3s ease;
+    }
+    
+    .tab.active {
+      background-color: var(--primary);
+      color: white;
+      border-bottom: 2px solid transparent;
+    }
+    
+    .tab:hover:not(.active) {
+      background-color: #e9ecef;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+      padding: 20px;
+      margin-bottom: 20px;
+      transition: transform 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    }
+    
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    .card-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .player-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+    }
+    
+    .player-card {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .player-header {
+      display: flex;
+      align-items: center;
+    }
+    
+    .player-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .player-meta {
+      display: flex;
+      justify-content: space-between;
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
+    
+    .stat-name {
+      font-weight: 500;
+      color: #555;
+    }
+    
+    .stat-value {
+      font-weight: 600;
+      color: var(--dark);
+    }
+    
+    .highlight {
+      font-weight: bold;
+      color: var(--primary);
+    }
+    
+    .value-indicator {
+      display: inline-block;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    .undervalued {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .overvalued {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .fairly-valued {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      font-size: 18px;
+      color: #666;
+    }
+    
+    .error {
+      padding: 20px;
+      background-color: #f8d7da;
+      color: #721c24;
+      border-radius: 8px;
+      text-align: center;
+    }
 
-    <script>
-      fetch("http://localhost:5000/players")
-        .then((response) => response.json())
-        .then((data) => {
-          const playerList = document.getElementById("player-list");
-          data.forEach((player) => {
-            const listItem = document.createElement("li");
-            listItem.textContent = `${player.Player}: ${player.score}`;
-            playerList.appendChild(listItem);
-          });
-        })
-        .catch((error) => console.error("Error fetching data:", error));
-    </script>
-  </body>
+    .player-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .player-details.expanded {
+      max-height: 800px;
+    }
+
+    .search-bar {
+      margin-bottom: 20px;
+      padding: 10px;
+    }
+    
+    .search-bar input {
+      width: 100%;
+      padding: 10px 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+    
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #2980b9;
+    }
+    
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    
+    footer {
+      text-align: center;
+      padding: 20px;
+      background-color: var(--dark);
+      color: white;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>SoccerScout - Advanced Player Analysis</h1>
+  </header>
+  
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" data-tab="all-players">All Players</div>
+      <div class="tab" data-tab="undervalued">Top Undervalued</div>
+      <div class="tab" data-tab="distributions">Stat Distributions</div>
+    </div>
+    
+    <div class="search-bar">
+      <input type="text" id="player-search" placeholder="Search players by name, club, or position...">
+    </div>
+    
+    <div id="all-players" class="tab-content active">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">All Players Ranked</h2>
+        </div>
+        <div id="player-grid" class="player-grid">
+          <div class="loading">Loading player data...</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="undervalued" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Top Undervalued Players</h2>
+        </div>
+        <div id="undervalued-grid" class="player-grid">
+          <div class="loading">Loading undervalued players...</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="distributions" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Statistical Distributions</h2>
+        </div>
+        <div id="stats-distribution">
+          <div class="loading">Loading statistical distributions...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <footer>
+    <p>SoccerScout - AI-powered player analysis for identifying undervalued talent</p>
+  </footer>
+
+  <script>
+    // Tab functionality
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Remove active class from all tabs and contents
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        // Add active class to clicked tab and corresponding content
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+      });
+    });
+    
+    // Format currency
+    function formatCurrency(value) {
+      const mill = value / 1000000;
+      return '€' + mill.toFixed(1) + 'M';
+    }
+    
+    // Get value indicator class
+    function getValueIndicatorClass(ratio) {
+      if (ratio > 2) return 'undervalued';
+      if (ratio < 0.5) return 'overvalued';
+      return 'fairly-valued';
+    }
+    
+    // Get value text
+    function getValueText(ratio) {
+      if (ratio > 2) return 'Undervalued';
+      if (ratio < 0.5) return 'Overvalued';
+      return 'Fair Value';
+    }
+    
+    // Fetch and display all players
+    fetch('/players')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(players => {
+        const playerGrid = document.getElementById('player-grid');
+        playerGrid.innerHTML = ''; // Clear loading
+        
+        if (players.length === 0) {
+          playerGrid.innerHTML = '<div class="error">No player data available</div>';
+          return;
+        }
+        
+        players.forEach(player => {
+          const valueClass = getValueIndicatorClass(player.value_ratio);
+          const valueText = getValueText(player.value_ratio);
+          
+          const playerCard = document.createElement('div');
+          playerCard.className = 'card player-card';
+          playerCard.innerHTML = `
+            <div class="player-header">
+              <div>
+                <div class="player-name">${player.name}</div>
+                <div class="player-meta">
+                  <span>${player.age} years | ${player.position} | ${player.club}</span>
+                  <span class="value-indicator ${valueClass}">${valueText}</span>
+                </div>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <span class="stat-name">Performance Score</span>
+                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-name">Market Value</span>
+                <span class="stat-value">${formatCurrency(player.market_value)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-name">Goals</span>
+                <span class="stat-value">${player.goals}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-name">Assists</span>
+                <span class="stat-value">${player.assists}</span>
+              </div>
+            </div>
+            <div class="player-details" id="details-${player.id}">
+              <div class="stats-grid" style="margin-top: 15px;">
+                <div class="stat-item">
+                  <span class="stat-name">xG</span>
+                  <span class="stat-value">${player.xg.toFixed(2)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">xA</span>
+                  <span class="stat-value">${player.xa.toFixed(2)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">SCA</span>
+                  <span class="stat-value">${player.sca}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">GCA</span>
+                  <span class="stat-value">${player.gca}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Tackles</span>
+                  <span class="stat-value">${player.tackles}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Interceptions</span>
+                  <span class="stat-value">${player.interceptions}</span>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" style="margin-top: 10px;" 
+              onclick="toggleDetails(${player.id})">Show Details</button>
+          `;
+          playerGrid.appendChild(playerCard);
+        });
+        
+        // Initialize search functionality after loading players
+        initializeSearch();
+      })
+      .catch(error => {
+        document.getElementById('player-grid').innerHTML = 
+          `<div class="error">Error loading player data: ${error.message}</div>`;
+      });
+    
+    // Fetch and display undervalued players
+    fetch('/top-undervalued')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(players => {
+        const undervaluedGrid = document.getElementById('undervalued-grid');
+        undervaluedGrid.innerHTML = ''; // Clear loading
+        
+        if (players.length === 0) {
+          undervaluedGrid.innerHTML = '<div class="error">No undervalued player data available</div>';
+          return;
+        }
+        
+        players.forEach(player => {
+          const playerCard = document.createElement('div');
+          playerCard.className = 'card player-card';
+          playerCard.innerHTML = `
+            <div class="player-header">
+              <div>
+                <div class="player-name">${player.name}</div>
+                <div class="player-meta">
+                  <span>${player.age} years | ${player.position} | ${player.club}</span>
+                  <span class="value-indicator undervalued">Undervalued</span>
+                </div>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <span class="stat-name">Performance Score</span>
+                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-name">Market Value</span>
+                <span class="stat-value">${formatCurrency(player.market_value)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-name">Value Ratio</span>
+                <span class="stat-value highlight">${player.value_ratio.toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+          undervaluedGrid.appendChild(playerCard);
+        });
+      })
+      .catch(error => {
+        document.getElementById('undervalued-grid').innerHTML = 
+          `<div class="error">Error loading undervalued player data: ${error.message}</div>`;
+      });
+    
+    // Fetch and display stat distributions
+    fetch('/stats-distribution')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(distributions => {
+        const statsDistribution = document.getElementById('stats-distribution');
+        statsDistribution.innerHTML = ''; // Clear loading
+        
+        if (Object.keys(distributions).length === 0) {
+          statsDistribution.innerHTML = '<div class="error">No statistical distribution data available</div>';
+          return;
+        }
+        
+        // Create a grid layout for stats
+        const statsGrid = document.createElement('div');
+        statsGrid.style.display = 'grid';
+        statsGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+        statsGrid.style.gap = '20px';
+        
+        // Add each stat distribution
+        for (const [metric, data] of Object.entries(distributions)) {
+          const statCard = document.createElement('div');
+          statCard.className = 'card';
+          
+          // Format metric name for display
+          const displayName = metric
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          
+          statCard.innerHTML = `
+            <h3>${displayName}</h3>
+            <div>
+              <p><strong>Range:</strong> ${data.min.toFixed(2)} - ${data.max.toFixed(2)}</p>
+              <p><strong>Average:</strong> ${data.mean.toFixed(2)}</p>
+              <p><strong>Median:</strong> ${data.median.toFixed(2)}</p>
+              <p><strong>Percentiles:</strong></p>
+              <ul>
+                <li>10th: ${data.percentiles['10'].toFixed(2)}</li>
+                <li>25th: ${data.percentiles['25'].toFixed(2)}</li>
+                <li>50th: ${data.percentiles['50'].toFixed(2)}</li>
+                <li>75th: ${data.percentiles['75'].toFixed(2)}</li>
+                <li>90th: ${data.percentiles['90'].toFixed(2)}</li>
+              </ul>
+            </div>
+          `;
+          statsGrid.appendChild(statCard);
+        }
+        
+        statsDistribution.appendChild(statsGrid);
+      })
+      .catch(error => {
+        document.getElementById('stats-distribution').innerHTML = 
+          `<div class="error">Error loading statistical distributions: ${error.message}</div>`;
+      });
+    
+    // Toggle player details
+    window.toggleDetails = function(playerId) {
+      const detailsEl = document.getElementById(`details-${playerId}`);
+      const button = detailsEl.nextElementSibling;
+      
+      if (detailsEl.classList.contains('expanded')) {
+        detailsEl.classList.remove('expanded');
+        button.textContent = 'Show Details';
+      } else {
+        detailsEl.classList.add('expanded');
+        button.textContent = 'Hide Details';
+      }
+    };
+    
+    // Initialize search functionality
+    function initializeSearch() {
+      const searchInput = document.getElementById('player-search');
+      const playerCards = document.querySelectorAll('.player-card');
+      
+      searchInput.addEventListener('input', () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        
+        playerCards.forEach(card => {
+          const playerText = card.textContent.toLowerCase();
+          if (playerText.includes(searchTerm)) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    }
+  </script>
+</body>
 </html>
