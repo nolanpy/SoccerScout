@@ -1,2 +1,28 @@
+# OS specific files
 .DS_Store
 src/.DS_Store
+Thumbs.db
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Virtual environment
+venv/
+env/
+.env
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
