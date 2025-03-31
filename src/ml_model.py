@@ -157,15 +157,16 @@ class PlayerValueModel:
             40: 0.05
         }
         
-        # Define non-feature columns but add position and age as features
+        # Define non-feature columns but add age as a feature
         self.non_features = ['id', 'name', 'nationality', 'club', 'league',
                             'height', 'weight', 'preferred_foot', 'market_value', 
-                            'last_updated']
+                            'position', 'position_category', 'age_group', 'season', 'last_updated']
     
     def _get_features(self, data):
         """Extract features from data"""
         # Get all features by excluding non-feature columns
         features = [col for col in data.columns if col not in self.non_features and not col.endswith('_weighted')]
+        logger.info(f"Selected {len(features)} features for model: {features}")
         return features
     
     def train(self, seasons=None, test_size=0.2, save_model=True):
@@ -227,6 +228,32 @@ class PlayerValueModel:
                 
                 # Get position-specific features and target
                 features = self._get_features(position_df)
+                
+                # Check for and handle any missing values
+                missing_values = position_df[features].isnull().sum()
+                features_with_missing = missing_values[missing_values > 0]
+                
+                if not features_with_missing.empty:
+                    logger.warning(f"Position {position} - Features with missing values: \n{features_with_missing}")
+                    logger.info(f"Position {position} - Filling missing values with median values...")
+                    for feature in features_with_missing.index:
+                        position_df[feature] = position_df[feature].fillna(position_df[feature].median())
+                
+                # Verify all features are numeric
+                non_numeric_features = []
+                for feature in features:
+                    if not pd.api.types.is_numeric_dtype(position_df[feature]):
+                        non_numeric_features.append(feature)
+                        logger.warning(f"Position {position} - Feature '{feature}' is not numeric: {position_df[feature].dtype}")
+                
+                if non_numeric_features:
+                    logger.warning(f"Position {position} - Removing non-numeric features: {non_numeric_features}")
+                    # Remove non-numeric features
+                    features = [f for f in features if f not in non_numeric_features]
+                    if not features:
+                        logger.error(f"Position {position} - No numeric features left for training!")
+                        continue
+                
                 X = position_df[features]
                 y = position_df['market_value']
                 
@@ -284,6 +311,33 @@ class PlayerValueModel:
         
         # Get features for general model
         features = self._get_features(df)
+        
+        # Check for and handle any missing values
+        logger.info("Checking for missing values in features...")
+        missing_values = df[features].isnull().sum()
+        features_with_missing = missing_values[missing_values > 0]
+        
+        if not features_with_missing.empty:
+            logger.warning(f"Features with missing values: \n{features_with_missing}")
+            logger.info("Filling missing values with median values...")
+            for feature in features_with_missing.index:
+                df[feature] = df[feature].fillna(df[feature].median())
+        
+        # Verify all features are numeric
+        non_numeric_features = []
+        for feature in features:
+            if not pd.api.types.is_numeric_dtype(df[feature]):
+                non_numeric_features.append(feature)
+                logger.warning(f"Feature '{feature}' is not numeric: {df[feature].dtype}")
+        
+        if non_numeric_features:
+            logger.error(f"Found non-numeric features that must be removed: {non_numeric_features}")
+            # Remove non-numeric features
+            features = [f for f in features if f not in non_numeric_features]
+            if not features:
+                logger.error("No numeric features left for training!")
+                return None
+        
         X = df[features]
         y = df['market_value']
         
@@ -381,6 +435,8 @@ class PlayerValueModel:
                 seasons = all_seasons[:-1]
             else:
                 seasons = ["2018-2019", "2019-2020", "2020-2021", "2021-2022", "2022-2023"]
+                
+        logger.info(f"Training on seasons: {seasons}")
         
         # Combine data from all seasons
         all_data = []
@@ -389,12 +445,21 @@ class PlayerValueModel:
             if not season_data.empty:
                 season_data['season'] = season
                 all_data.append(season_data)
+                logger.info(f"Added {len(season_data)} players from season {season}")
+            else:
+                logger.warning(f"No data found for season {season}")
         
         if not all_data:
             logger.warning("No data found for selected seasons")
             return pd.DataFrame()
             
         df = pd.concat(all_data, ignore_index=True)
+        
+        # Log data shape and columns before returning
+        logger.info(f"Training data shape: {df.shape}")
+        logger.info(f"Training data columns: {df.columns.tolist()}")
+        logger.info(f"Data types: {df.dtypes}")
+        
         return df
     
     def _get_all_seasons(self):
@@ -470,6 +535,21 @@ class PlayerValueModel:
                     # Get indices for this position
                     position_indices = df.index[df['position_category'] == position]
                     
+                    # Verify all features are numeric
+                    non_numeric_features = []
+                    for feature in position_features:
+                        if feature in df.columns and not pd.api.types.is_numeric_dtype(df[feature]):
+                            non_numeric_features.append(feature)
+                            logger.warning(f"Position {position} - Feature '{feature}' is not numeric: {df[feature].dtype}")
+                    
+                    if non_numeric_features:
+                        logger.warning(f"Position {position} - Removing non-numeric features for prediction: {non_numeric_features}")
+                        # Remove non-numeric features
+                        position_features = [f for f in position_features if f not in non_numeric_features]
+                        if not position_features:
+                            logger.error(f"Position {position} - No numeric features left for prediction!")
+                            continue
+                    
                     # Extract features for this position
                     X_pos = df.loc[position_indices, position_features]
                     
@@ -492,6 +572,22 @@ class PlayerValueModel:
             
             # Extract features for general model
             features = self._get_features(df)
+            
+            # Verify all features are numeric
+            non_numeric_features = []
+            for feature in features:
+                if feature in df.columns and not pd.api.types.is_numeric_dtype(df[feature]):
+                    non_numeric_features.append(feature)
+                    logger.warning(f"Feature '{feature}' is not numeric: {df[feature].dtype}")
+            
+            if non_numeric_features:
+                logger.warning(f"Removing non-numeric features for prediction: {non_numeric_features}")
+                # Remove non-numeric features
+                features = [f for f in features if f not in non_numeric_features]
+                if not features:
+                    logger.error("No numeric features left for prediction!")
+                    return np.zeros(len(df))
+            
             X_general = df.loc[general_indices, features]
             
             # Scale features
@@ -634,91 +730,244 @@ class PlayerValueModel:
         
         results = []
         for season in seasons:
-            # Get data for this season
-            season_data = db.get_players_with_stats(season)
-            
-            if season_data.empty:
-                continue
+            try:
+                # Get data for this season
+                season_data = db.get_players_with_stats(season)
                 
-            # Split features and actual values
-            features = self._get_features(season_data)
-            X = season_data[features]
-            y_actual = season_data['market_value']
+                if season_data.empty:
+                    logger.warning(f"No data found for season {season}. Skipping.")
+                    continue
+                
+                # Add missing age-related features if needed
+                if self.age_adjusted:
+                    # Add position category
+                    if 'position_category' not in season_data.columns:
+                        season_data['position_category'] = season_data['position'].apply(
+                            lambda pos: self.position_categories.get(pos, 'midfielder')
+                        )
+                    
+                    # Add age group
+                    if 'age_group' not in season_data.columns:
+                        season_data['age_group'] = pd.cut(
+                            season_data['age'], 
+                            bins=[15, 21, 25, 29, 33, 40], 
+                            labels=['youth', 'developing', 'prime', 'experienced', 'veteran']
+                        )
+                    
+                    # Add age factor
+                    if 'age_factor' not in season_data.columns:
+                        season_data['age_factor'] = season_data['age'].apply(
+                            lambda age: self.age_adjustment.get(age, 1.0)
+                        )
+                    
+                    # Add years to peak and estimated years left
+                    if 'years_to_peak' not in season_data.columns:
+                        PEAK_AGE = 27
+                        season_data['years_to_peak'] = PEAK_AGE - season_data['age']
+                    
+                    if 'estimated_years_left' not in season_data.columns:
+                        season_data['estimated_years_left'] = 35 - season_data['age']
+                        season_data.loc[season_data['estimated_years_left'] < 0, 'estimated_years_left'] = 0
+                
+                # Get features for this season's data
+                features = self._get_features(season_data)
+                
+                # Verify all model features are present
+                # This is crucial - the features must match those used during training
+                model_features = []
+                if hasattr(self.model, 'feature_names_in_'):
+                    model_features = self.model.feature_names_in_
+                    logger.info(f"Model was trained with {len(model_features)} features")
+                    
+                    # Check for missing features
+                    missing_features = [f for f in model_features if f not in features]
+                    if missing_features:
+                        logger.warning(f"Missing features in evaluation data: {missing_features}")
+                        logger.warning("Skipping this season due to feature mismatch")
+                        continue
+                
+                # Remove non-numeric features
+                non_numeric_features = []
+                for feature in features:
+                    if not pd.api.types.is_numeric_dtype(season_data[feature]):
+                        non_numeric_features.append(feature)
+                
+                if non_numeric_features:
+                    logger.warning(f"Removing non-numeric features: {non_numeric_features}")
+                    features = [f for f in features if f not in non_numeric_features]
+                
+                # Verify we have features left
+                if not features:
+                    logger.error(f"No valid features for season {season}. Skipping.")
+                    continue
+                
+                logger.info(f"Evaluating model on season {season} with {len(features)} features")
+                
+                # Get feature data and actual values
+                X = season_data[features]
+                y_actual = season_data['market_value']
+                
+                # Handle missing values
+                if X.isnull().any().any():
+                    logger.warning(f"Found missing values in features for season {season}. Filling with median.")
+                    X = X.fillna(X.median())
+                
+                # Scale features
+                X_scaled = self.scaler.transform(X)
+                
+                # Make predictions
+                y_pred = self.model.predict(X_scaled)
+            except Exception as e:
+                logger.error(f"Error analyzing season {season}: {str(e)}")
+                continue
             
-            # Scale features
-            X_scaled = self.scaler.transform(X)
-            
-            # Make predictions
-            y_pred = self.model.predict(X_scaled)
-            
-            # Calculate metrics
-            mae = mean_absolute_error(y_actual, y_pred)
-            rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
-            r2 = r2_score(y_actual, y_pred)
-            
-            # Average % error
-            pct_error = np.mean(np.abs(y_pred - y_actual) / y_actual) * 100
-            
-            results.append({
-                'season': season,
-                'mae': mae,
-                'rmse': rmse,
-                'r2': r2,
-                'pct_error': pct_error
-            })
+            try:
+                # Calculate metrics
+                mae = mean_absolute_error(y_actual, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
+                r2 = r2_score(y_actual, y_pred)
+                
+                # Average % error (with protection against division by zero)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    pct_errors = np.abs(y_pred - y_actual) / y_actual * 100
+                    # Replace infinity and NaN with a high value (1000%)
+                    pct_errors = np.nan_to_num(pct_errors, nan=1000, posinf=1000)
+                    pct_error = np.mean(pct_errors)
+                
+                logger.info(f"Season {season} metrics - MAE: {mae:.2f}, RMSE: {rmse:.2f}, R²: {r2:.4f}, Error: {pct_error:.2f}%")
+                
+                results.append({
+                    'season': season,
+                    'mae': mae,
+                    'rmse': rmse,
+                    'r2': r2,
+                    'pct_error': pct_error,
+                    'sample_count': len(y_actual)
+                })
+            except Exception as e:
+                logger.error(f"Error calculating metrics for season {season}: {str(e)}")
+        
+        # Check if we have any results
+        if not results:
+            logger.error("No valid results for any season. Analysis failed.")
+            return None
         
         df_results = pd.DataFrame(results)
         
+        # Try to create visualization plots
         if plot and not df_results.empty:
-            plt.figure(figsize=(12, 8))
-            
-            # Plot R² by season
-            plt.subplot(2, 2, 1)
-            plt.plot(df_results['season'], df_results['r2'], marker='o')
-            plt.title('R² by Season')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            
-            # Plot % Error by season
-            plt.subplot(2, 2, 2)
-            plt.plot(df_results['season'], df_results['pct_error'], marker='o', color='red')
-            plt.title('% Error by Season')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            
-            plt.savefig(os.path.join(MODEL_DIR, 'model_performance.png'))
+            try:
+                import matplotlib
+                matplotlib.use('Agg')  # Use non-interactive backend
+                
+                plt.figure(figsize=(12, 8))
+                
+                # Plot R² by season
+                plt.subplot(2, 2, 1)
+                plt.plot(df_results['season'], df_results['r2'], marker='o')
+                plt.title('R² by Season')
+                plt.xticks(rotation=45)
+                plt.grid(True, alpha=0.3)
+                
+                # Plot % Error by season
+                plt.subplot(2, 2, 2)
+                plt.plot(df_results['season'], df_results['pct_error'], marker='o', color='red')
+                plt.title('% Error by Season')
+                plt.xticks(rotation=45)
+                plt.grid(True, alpha=0.3)
+                
+                # Plot MAE by season
+                plt.subplot(2, 2, 3)
+                plt.plot(df_results['season'], df_results['mae'], marker='o', color='green')
+                plt.title('MAE by Season')
+                plt.xticks(rotation=45)
+                plt.grid(True, alpha=0.3)
+                
+                # Plot sample count by season
+                plt.subplot(2, 2, 4)
+                plt.bar(df_results['season'], df_results['sample_count'], color='blue', alpha=0.7)
+                plt.title('Sample Count by Season')
+                plt.xticks(rotation=45)
+                plt.grid(True, alpha=0.3)
+                
+                plt.tight_layout()
+                
+                # Save the figure
+                plot_path = os.path.join(MODEL_DIR, 'model_performance.png')
+                plt.savefig(plot_path)
+                logger.info(f"Performance plots saved to {plot_path}")
+            except Exception as e:
+                logger.error(f"Error creating performance plots: {str(e)}")
         
         return df_results
 
 # Helper functions
 def train_multiple_models():
     """Train and compare multiple ML models"""
-    model_types = ["random_forest", "gradient_boosting", "ridge", "lasso"]
-    results = {}
-    
-    for model_type in model_types:
-        logger.info(f"Training {model_type} model...")
-        model = PlayerValueModel(model_type=model_type)
-        metrics = model.train(save_model=True)
-        results[model_type] = metrics
-    
-    # Compare results
-    comparison = pd.DataFrame({
-        model_type: {
-            'Test MAE': metrics['test_mae'],
-            'Test RMSE': metrics['test_rmse'],
-            'Test R²': metrics['test_r2']
-        }
-        for model_type, metrics in results.items()
-    })
-    
-    logger.info("Model comparison:")
-    logger.info(comparison)
-    
-    # Save comparison
-    comparison.to_csv(os.path.join(MODEL_DIR, 'model_comparison.csv'))
-    
-    return comparison
+    try:
+        model_types = ["random_forest", "gradient_boosting", "ridge", "lasso"]
+        results = {}
+        successful_models = []
+        
+        for model_type in model_types:
+            try:
+                logger.info(f"Training {model_type} model...")
+                model = PlayerValueModel(model_type=model_type)
+                metrics = model.train(save_model=True)
+                
+                if metrics is not None:
+                    results[model_type] = metrics
+                    successful_models.append(model_type)
+                    logger.info(f"{model_type} model trained successfully. Test R²: {metrics['test_r2']:.4f}")
+                else:
+                    logger.warning(f"Failed to train {model_type} model, no metrics returned")
+            except Exception as e:
+                logger.error(f"Error training {model_type} model: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+        
+        if not results:
+            logger.error("No models trained successfully")
+            return None
+            
+        # Compare results for successful models
+        try:
+            comparison_data = {}
+            for model_type in successful_models:
+                metrics = results[model_type]
+                comparison_data[model_type] = {
+                    'Test MAE': metrics['test_mae'],
+                    'Test RMSE': metrics['test_rmse'],
+                    'Test R²': metrics['test_r2']
+                }
+            
+            comparison = pd.DataFrame(comparison_data)
+            
+            logger.info("Model comparison:")
+            logger.info(comparison)
+            
+            # Save comparison
+            comparison_path = os.path.join(MODEL_DIR, 'model_comparison.csv')
+            comparison.to_csv(comparison_path)
+            logger.info(f"Model comparison saved to {comparison_path}")
+            
+            # Identify best model
+            best_model = max(successful_models, key=lambda m: results[m]['test_r2'])
+            logger.info(f"Best model: {best_model} (R²: {results[best_model]['test_r2']:.4f})")
+            
+            return comparison
+            
+        except Exception as e:
+            logger.error(f"Error comparing models: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error in train_multiple_models: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
 
 def predict_current_values(position_specific=True, age_adjusted=True, season=None):
     """Predict market values for current season players and calculate value ratio
@@ -731,109 +980,189 @@ def predict_current_values(position_specific=True, age_adjusted=True, season=Non
     Returns:
         pd.DataFrame: Player data with predictions and value ratios
     """
-    # Use the best model (random forest or gradient boosting typically performs best)
-    model = PlayerValueModel(
-        model_type="random_forest", 
-        position_specific=position_specific, 
-        age_adjusted=age_adjusted
-    )
-    
-    # Try to load existing model, train if not available
-    if not model.load_model():
-        logger.info("Training new model...")
-        model.train()
-    
-    # Determine current season if not specified
-    if season is None:
-        all_seasons = model._get_all_seasons()
-        if all_seasons:
-            season = all_seasons[-1]  # Most recent season
-        else:
-            season = "2023-2024"  # Default
-    
-    # Get current season data
-    player_data = db.get_players_with_stats(season)
-    
-    if player_data.empty:
-        logger.error(f"No data for season {season}")
+    try:
+        # Use the best model (random forest or gradient boosting typically performs best)
+        model = PlayerValueModel(
+            model_type="random_forest", 
+            position_specific=position_specific, 
+            age_adjusted=age_adjusted
+        )
+        
+        # Try to load existing model, train if not available
+        if not model.load_model():
+            logger.info("No pre-trained model found. Training new model...")
+            model.train()
+        
+        # Determine current season if not specified
+        if season is None:
+            all_seasons = model._get_all_seasons()
+            if all_seasons:
+                season = all_seasons[-1]  # Most recent season
+            else:
+                season = "2023-2024"  # Default
+        
+        logger.info(f"Making predictions for season: {season}")
+        
+        # Get current season data
+        player_data = db.get_players_with_stats(season)
+        
+        if player_data.empty:
+            logger.error(f"No data for season {season}")
+            return None
+            
+        # Add debugging logs
+        logger.info(f"Player data columns: {player_data.columns.tolist()}")
+        logger.info(f"Feature types: {player_data.dtypes}")
+        logger.info(f"Position values: {player_data['position'].unique()}")
+        
+        # Add position category if not present
+        if 'position_category' not in player_data.columns:
+            player_data['position_category'] = player_data['position'].apply(
+                lambda pos: model.position_categories.get(pos, 'midfielder')
+            )
+            
+        # Add age-related features if needed
+        if age_adjusted:
+            # Add age group
+            if 'age_group' not in player_data.columns:
+                player_data['age_group'] = pd.cut(
+                    player_data['age'], 
+                    bins=[15, 21, 25, 29, 33, 40], 
+                    labels=['youth', 'developing', 'prime', 'experienced', 'veteran']
+                )
+                
+            # Add age factor
+            if 'age_factor' not in player_data.columns:
+                player_data['age_factor'] = player_data['age'].apply(
+                    lambda age: model.age_adjustment.get(age, 1.0)
+                )
+                
+            # Add years to peak and estimated years left
+            if 'years_to_peak' not in player_data.columns:
+                PEAK_AGE = 27
+                player_data['years_to_peak'] = PEAK_AGE - player_data['age']
+                
+            if 'estimated_years_left' not in player_data.columns:
+                player_data['estimated_years_left'] = 35 - player_data['age']
+                player_data.loc[player_data['estimated_years_left'] < 0, 'estimated_years_left'] = 0
+        
+        # Make predictions
+        logger.info("Making value predictions...")
+        predicted_values = model.predict(player_data)
+        
+        # Add predictions to dataframe
+        player_data['predicted_value'] = predicted_values
+        
+    except Exception as e:
+        logger.error(f"Error predicting values: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
     
-    # Make predictions
-    predicted_values = model.predict(player_data)
-    
-    # Add predictions to dataframe
-    player_data['predicted_value'] = predicted_values
-    
-    # Calculate value ratio (predicted/actual)
-    # A ratio > 1 means the player is predicted to be worth more than their current market value (undervalued)
-    # A ratio < 1 means the player is predicted to be worth less than their current market value (overvalued)
-    player_data['value_ratio'] = player_data['predicted_value'] / player_data['market_value']
-    
-    # Calculate the percentage difference
-    player_data['value_difference_pct'] = (
-        (player_data['predicted_value'] - player_data['market_value']) / 
-        player_data['market_value'] * 100
-    )
-    
-    # Identify undervalued/overvalued players
-    player_data['status'] = 'fair value'
-    player_data.loc[player_data['value_ratio'] > 1.5, 'status'] = 'undervalued'
-    player_data.loc[player_data['value_ratio'] < 0.7, 'status'] = 'overvalued'
-    
-    # Add position category for analysis
-    if 'position_category' not in player_data.columns:
-        player_data['position_category'] = player_data['position'].apply(
-            lambda pos: model.position_categories.get(pos, 'midfielder')
-        )
-    
-    # Add age group for analysis
-    if 'age_group' not in player_data.columns:
-        player_data['age_group'] = pd.cut(
-            player_data['age'], 
-            bins=[15, 21, 25, 29, 33, 40], 
-            labels=['youth', 'developing', 'prime', 'experienced', 'veteran']
-        )
-    
-    # Select relevant columns
-    result = player_data[[
-        'id', 'name', 'age', 'age_group', 'position', 'position_category', 
-        'nationality', 'club', 'league', 'market_value', 'predicted_value', 
-        'value_ratio', 'value_difference_pct', 'status'
-    ]]
-    
-    return result.sort_values('value_ratio', ascending=False)
+    try:
+        # Calculate value ratio (predicted/actual)
+        # A ratio > 1 means the player is predicted to be worth more than their current market value (undervalued)
+        # A ratio < 1 means the player is predicted to be worth less than their current market value (overvalued)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            player_data['value_ratio'] = player_data['predicted_value'] / player_data['market_value']
+            # Replace inf and NaN with 0 for zero market values
+            player_data['value_ratio'] = player_data['value_ratio'].fillna(0).replace([np.inf, -np.inf], 0)
+        
+        # Calculate the percentage difference
+        with np.errstate(divide='ignore', invalid='ignore'):
+            player_data['value_difference_pct'] = (
+                (player_data['predicted_value'] - player_data['market_value']) / 
+                player_data['market_value'] * 100
+            )
+            # Replace inf and NaN
+            player_data['value_difference_pct'] = player_data['value_difference_pct'].fillna(0).replace([np.inf, -np.inf], 0)
+        
+        # Identify undervalued/overvalued players
+        player_data['status'] = 'fair value'
+        player_data.loc[player_data['value_ratio'] > 1.5, 'status'] = 'undervalued'
+        player_data.loc[player_data['value_ratio'] < 0.7, 'status'] = 'overvalued'
+        
+        # Select relevant columns (handle case where columns might be missing)
+        result_columns = [
+            'id', 'name', 'age', 'position', 'nationality', 
+            'club', 'league', 'market_value', 'predicted_value', 
+            'value_ratio', 'value_difference_pct', 'status'
+        ]
+        
+        # Add optional columns if they exist
+        if 'age_group' in player_data.columns:
+            result_columns.append('age_group')
+        if 'position_category' in player_data.columns:
+            result_columns.append('position_category')
+        
+        # Make sure all columns exist
+        available_columns = [col for col in result_columns if col in player_data.columns]
+        
+        # Select available columns
+        result = player_data[available_columns]
+        
+        # Sort by value ratio (descending)
+        result = result.sort_values('value_ratio', ascending=False)
+        
+        logger.info(f"Prediction complete: Found {len(result)} players with predictions")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error calculating value metrics: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
 
 def update_stat_weights_from_model():
     """Update the statistical weights in app.py based on model feature importance"""
-    model = PlayerValueModel(model_type="random_forest")
-    
-    # Try to load existing model, train if not available
-    if not model.load_model():
-        logger.info("Training new model...")
-        model.train()
-    
-    # Get optimal weights
-    weights = model.get_optimal_weights()
-    
-    if not weights:
-        logger.error("Failed to get optimal weights")
+    try:
+        model = PlayerValueModel(model_type="random_forest")
+        
+        # Try to load existing model, train if not available
+        if not model.load_model():
+            logger.info("No pre-trained model found. Training new model...")
+            training_result = model.train()
+            if training_result is None:
+                logger.error("Failed to train model for weight optimization")
+                return False
+        
+        # Get optimal weights
+        weights = model.get_optimal_weights()
+        
+        if not weights:
+            logger.error("Failed to get optimal weights")
+            return False
+        
+        # Format weights for Python code
+        weights_str = "{\n"
+        for feature, weight in sorted(weights.items()):
+            weights_str += f"    '{feature}': {weight:.2f},\n"
+        weights_str += "}"
+        
+        logger.info(f"Generated {len(weights)} new feature weights")
+        
+        # Save weights to a file for reference
+        weights_path = os.path.join(MODEL_DIR, 'optimal_weights.py')
+        with open(weights_path, 'w') as f:
+            f.write(f"# Auto-generated weights from ML model\n# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nstat_weights = {weights_str}\n")
+        
+        logger.info(f"Weights saved to {weights_path}")
+        
+        # Also save as JSON for easier consumption by other systems
+        import json
+        json_path = os.path.join(MODEL_DIR, 'optimal_weights.json')
+        with open(json_path, 'w') as f:
+            json.dump(weights, f, indent=2)
+        
+        logger.info(f"Weights also saved as JSON to {json_path}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error updating weights from model: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
-    
-    # Format weights for Python code
-    weights_str = "{\n"
-    for feature, weight in sorted(weights.items()):
-        weights_str += f"    '{feature}': {weight:.2f},\n"
-    weights_str += "}"
-    
-    logger.info(f"Generated new weights: {weights_str}")
-    
-    # Save weights to a file for reference
-    with open(os.path.join(MODEL_DIR, 'optimal_weights.py'), 'w') as f:
-        f.write(f"# Auto-generated weights from ML model\nstat_weights = {weights_str}\n")
-    
-    logger.info(f"Weights saved to {os.path.join(MODEL_DIR, 'optimal_weights.py')}")
-    
-    return True
 
 if __name__ == "__main__":
     # Example usage
