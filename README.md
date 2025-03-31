@@ -4,10 +4,10 @@ SoccerScout is a tool for soccer clubs to identify undervalued and overvalued pl
 
 ## Next Steps
 
-[] Add ML models to predict market values
-[] Compare predicted vs. actual values
-[] Track prediction accuracy over time
-[] Add more visualization tools
+- [ ] Add ML models to predict market values
+- [ ] Compare predicted vs. actual values
+- [ ] Track prediction accuracy over time
+- [ ] Add more visualization tools
 
 ## Overview
 
