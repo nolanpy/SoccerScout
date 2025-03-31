@@ -26,3 +26,24 @@ env/
 
 # Logs
 *.log
+
+# ML model files and data
+*.pkl
+*.joblib
+src/models/*.pkl
+src/models/*.json
+src/models/*.csv
+src/models/*.png
+
+# Data files
+*.csv
+*.parquet
+*.xlsx
+*.xls
+
+# Images and plots
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
