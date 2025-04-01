@@ -308,12 +308,23 @@ def train_model():
     try:
         # Import ML module
         import ml_model
+        from flask import request
         
-        # Create model
-        model = ml_model.PlayerValueModel()
+        # Get optional parameters
+        tag = request.args.get('tag', 'baseline')
+        model_type = request.args.get('model_type', 'random_forest')
+        position_specific = request.args.get('position_specific', 'true').lower() == 'true'
+        age_adjusted = request.args.get('age_adjusted', 'true').lower() == 'true'
         
-        # Train model
-        metrics = model.train()
+        # Create model with specified parameters
+        model = ml_model.PlayerValueModel(
+            model_type=model_type,
+            position_specific=position_specific,
+            age_adjusted=age_adjusted
+        )
+        
+        # Train model with tag for tracking
+        metrics = model.train(tag=tag)
         
         if metrics is None:
             return jsonify({"error": "Failed to train model"}), 500
@@ -328,9 +339,30 @@ def train_model():
         
         # Return metrics and performance
         result = {
+            "training_settings": {
+                "tag": tag,
+                "model_type": model_type,
+                "position_specific": position_specific,
+                "age_adjusted": age_adjusted
+            },
             "training_metrics": metrics,
             "season_performance": performance_json
         }
+        
+        # Try to retrieve and include comparison with previous runs
+        try:
+            previous_metrics = ml_model.load_latest_metrics(model_type, tag="baseline")
+            if previous_metrics and previous_metrics.get("metrics"):
+                comparison = ml_model.compare_metrics(
+                    metrics, 
+                    previous_metrics.get("metrics"),
+                    model_type
+                )
+                if comparison:
+                    result["comparison_with_baseline"] = comparison
+        except Exception as e:
+            import traceback
+            result["comparison_error"] = str(e)
         
         return jsonify(result)
     except Exception as e:
@@ -384,6 +416,79 @@ def update_weights():
         import traceback
         return jsonify({
             "error": "Error updating weights", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/compare-model-runs')
+def compare_model_runs():
+    """Compare ML model performance across different runs/data versions"""
+    try:
+        # Import ML module
+        import ml_model
+        from flask import request
+        
+        # Get query parameters
+        model_type = request.args.get('model_type', 'random_forest')
+        baseline_tag = request.args.get('baseline_tag', 'baseline')
+        comparison_tag = request.args.get('comparison_tag')
+        
+        if not comparison_tag:
+            return jsonify({"error": "comparison_tag parameter is required"}), 400
+            
+        # Load baseline and comparison metrics
+        baseline_metrics = ml_model.load_latest_metrics(model_type, tag=baseline_tag)
+        comparison_metrics = ml_model.load_latest_metrics(model_type, tag=comparison_tag)
+        
+        if not baseline_metrics:
+            return jsonify({"error": f"No baseline metrics found for model {model_type} with tag {baseline_tag}"}), 404
+            
+        if not comparison_metrics:
+            return jsonify({"error": f"No comparison metrics found for model {model_type} with tag {comparison_tag}"}), 404
+            
+        # Generate comparison
+        comparison = ml_model.compare_metrics(
+            comparison_metrics["metrics"], 
+            baseline_metrics["metrics"],
+            model_type
+        )
+        
+        if not comparison:
+            return jsonify({"error": "Failed to generate comparison"}), 500
+            
+        # Create response with detailed metrics
+        response = {
+            "settings": {
+                "model_type": model_type,
+                "baseline_tag": baseline_tag,
+                "comparison_tag": comparison_tag,
+                "baseline_timestamp": baseline_metrics["timestamp"],
+                "comparison_timestamp": comparison_metrics["timestamp"]
+            },
+            "baseline_metrics": {
+                "r2": baseline_metrics["metrics"]["test_r2"],
+                "rmse": baseline_metrics["metrics"]["test_rmse"],
+                "mae": baseline_metrics["metrics"]["test_mae"],
+                "pct_error": baseline_metrics["metrics"].get("test_pct_error", "N/A"),
+                "data_size": baseline_metrics["metrics"].get("data_size", "N/A"),
+                "feature_count": baseline_metrics["metrics"].get("feature_count", "N/A")
+            },
+            "comparison_metrics": {
+                "r2": comparison_metrics["metrics"]["test_r2"],
+                "rmse": comparison_metrics["metrics"]["test_rmse"],
+                "mae": comparison_metrics["metrics"]["test_mae"],
+                "pct_error": comparison_metrics["metrics"].get("test_pct_error", "N/A"),
+                "data_size": comparison_metrics["metrics"].get("data_size", "N/A"),
+                "feature_count": comparison_metrics["metrics"].get("feature_count", "N/A")
+            },
+            "comparison": comparison
+        }
+        
+        return jsonify(response)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error comparing model runs", 
             "details": str(e),
             "traceback": traceback.format_exc()
         }), 500

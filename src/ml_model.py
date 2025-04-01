@@ -13,6 +13,8 @@ import numpy as np
 import sqlite3
 import os
 import pickle
+import json
+from datetime import datetime
 import database as db
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
@@ -23,16 +25,202 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 import logging
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Setup enhanced logging
+LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Create file handler
+log_file = os.path.join(LOG_DIR, f'ml_performance_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.INFO)
+
+# Create console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Configure logger
+logging.basicConfig(level=logging.INFO, handlers=[file_handler, console_handler])
 logger = logging.getLogger(__name__)
 
-# Path for saving models
+# Path for saving models and metrics
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
+METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
 os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(METRICS_DIR, exist_ok=True)
+
+def save_metrics_to_json(metrics, model_type="random_forest", tag=None):
+    """Save model performance metrics to a JSON file for easy tracking
+    
+    Args:
+        metrics (dict): Dictionary of model metrics
+        model_type (str): Type of model
+        tag (str): Optional tag to identify this metrics snapshot (e.g., "baseline", "more_data")
+    """
+    try:
+        # Create a timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create a filename that includes model type, tag if provided, and timestamp
+        if tag:
+            filename = f"{model_type}_{tag}_{timestamp}_metrics.json"
+        else:
+            filename = f"{model_type}_{timestamp}_metrics.json"
+        
+        file_path = os.path.join(METRICS_DIR, filename)
+        
+        # Add metadata
+        metrics_with_meta = {
+            "model_type": model_type,
+            "timestamp": datetime.now().isoformat(),
+            "tag": tag,
+            "metrics": metrics
+        }
+        
+        # Write metrics to file
+        with open(file_path, 'w') as f:
+            json.dump(metrics_with_meta, f, indent=2)
+            
+        logger.info(f"Metrics saved to {file_path}")
+        return file_path
+    except Exception as e:
+        logger.error(f"Error saving metrics to JSON: {e}")
+        return None
+
+def load_latest_metrics(model_type="random_forest", tag=None):
+    """Load the most recent metrics for a given model type and optional tag
+    
+    Args:
+        model_type (str): Type of model
+        tag (str): Optional tag to filter metrics
+        
+    Returns:
+        dict: Metrics dictionary or None if not found
+    """
+    try:
+        # List all metric files for this model type
+        files = [f for f in os.listdir(METRICS_DIR) 
+                 if f.startswith(model_type) and f.endswith("_metrics.json")]
+        
+        # Filter by tag if provided
+        if tag:
+            files = [f for f in files if tag in f]
+            
+        if not files:
+            logger.warning(f"No metric files found for {model_type}" + 
+                          (f" with tag {tag}" if tag else ""))
+            return None
+            
+        # Sort by timestamp (part of filename)
+        files.sort(reverse=True)
+        
+        # Load the most recent file
+        latest_file = os.path.join(METRICS_DIR, files[0])
+        with open(latest_file, 'r') as f:
+            metrics = json.load(f)
+            
+        logger.info(f"Loaded metrics from {latest_file}")
+        return metrics
+    except Exception as e:
+        logger.error(f"Error loading metrics: {e}")
+        return None
+
+def compare_metrics(current_metrics, previous_metrics=None, model_type="random_forest"):
+    """Compare current metrics with previous metrics
+    
+    Args:
+        current_metrics (dict): Current performance metrics
+        previous_metrics (dict): Previous performance metrics to compare against
+        model_type (str): Type of model
+        
+    Returns:
+        dict: Comparison results with improvement percentages
+    """
+    if previous_metrics is None:
+        # Try to load most recent metrics
+        previous_data = load_latest_metrics(model_type)
+        if previous_data:
+            previous_metrics = previous_data["metrics"]
+        else:
+            logger.warning("No previous metrics found for comparison")
+            return None
+    
+    if not previous_metrics:
+        logger.warning("No previous metrics provided for comparison")
+        return None
+        
+    # Extract test metrics for comparison
+    current_test_metrics = {
+        "r2": current_metrics["test_r2"],
+        "rmse": current_metrics["test_rmse"],
+        "mae": current_metrics["test_mae"]
+    }
+    
+    previous_test_metrics = {
+        "r2": previous_metrics["test_r2"],
+        "rmse": previous_metrics["test_rmse"],
+        "mae": previous_metrics["test_mae"]
+    }
+    
+    # Calculate changes and percent improvements
+    comparison = {}
+    
+    # R2 improvement (higher is better)
+    r2_change = current_test_metrics["r2"] - previous_test_metrics["r2"]
+    if previous_test_metrics["r2"] != 0:
+        r2_pct_change = (r2_change / abs(previous_test_metrics["r2"])) * 100
+    else:
+        r2_pct_change = float('inf') if r2_change > 0 else float('-inf') if r2_change < 0 else 0
+    
+    # RMSE improvement (lower is better)
+    rmse_change = previous_test_metrics["rmse"] - current_test_metrics["rmse"]
+    rmse_pct_change = (rmse_change / previous_test_metrics["rmse"]) * 100 if previous_test_metrics["rmse"] != 0 else 0
+    
+    # MAE improvement (lower is better)
+    mae_change = previous_test_metrics["mae"] - current_test_metrics["mae"]
+    mae_pct_change = (mae_change / previous_test_metrics["mae"]) * 100 if previous_test_metrics["mae"] != 0 else 0
+    
+    comparison = {
+        "current": current_test_metrics,
+        "previous": previous_test_metrics,
+        "changes": {
+            "r2": {
+                "absolute": r2_change,
+                "percentage": r2_pct_change,
+                "improved": r2_change > 0
+            },
+            "rmse": {
+                "absolute": rmse_change,
+                "percentage": rmse_pct_change,
+                "improved": rmse_change > 0
+            },
+            "mae": {
+                "absolute": mae_change,
+                "percentage": mae_pct_change,
+                "improved": mae_change > 0
+            }
+        },
+        "summary": {
+            "overall_improved": (r2_change > 0 and rmse_change > 0 and mae_change > 0)
+        }
+    }
+    
+    # Log the comparison results
+    logger.info("===== MODEL PERFORMANCE COMPARISON =====")
+    logger.info(f"R² score: {current_test_metrics['r2']:.4f} vs {previous_test_metrics['r2']:.4f} " + 
+               f"({'↑' if r2_change > 0 else '↓'} {abs(r2_pct_change):.2f}%)")
+    logger.info(f"RMSE: {current_test_metrics['rmse']:.2f} vs {previous_test_metrics['rmse']:.2f} " + 
+               f"({'↓' if rmse_change > 0 else '↑'} {abs(rmse_pct_change):.2f}%)")
+    logger.info(f"MAE: {current_test_metrics['mae']:.2f} vs {previous_test_metrics['mae']:.2f} " + 
+               f"({'↓' if mae_change > 0 else '↑'} {abs(mae_pct_change):.2f}%)")
+    logger.info(f"Overall: {'IMPROVED' if comparison['summary']['overall_improved'] else 'MIXED OR DEGRADED'}")
+    logger.info("========================================")
+    
+    return comparison
 
 class PlayerValueModel:
     """Machine learning model for predicting player market values"""
@@ -169,23 +357,42 @@ class PlayerValueModel:
         logger.info(f"Selected {len(features)} features for model: {features}")
         return features
     
-    def train(self, seasons=None, test_size=0.2, save_model=True):
+    def train(self, seasons=None, test_size=0.2, save_model=True, tag=None):
         """Train the model on historical data
         
         Args:
             seasons (list): List of seasons to include
             test_size (float): Proportion of data to use for testing
             save_model (bool): Whether to save the trained model
+            tag (str): Optional tag to identify this training run (e.g., "baseline", "more_data")
             
         Returns:
             dict: Training metrics
         """
+        # Log training details
+        logger.info("====================================================")
+        logger.info(f"STARTING TRAINING: {self.model_type.upper()} MODEL")
+        if tag:
+            logger.info(f"Training run tag: {tag}")
+        logger.info(f"Position-specific: {self.position_specific}, Age-adjusted: {self.age_adjusted}")
+        logger.info("====================================================")
+        
+        # Record training start time
+        training_start_time = datetime.now()
+        
         # Get training data
         df = self._get_training_data(seasons)
         
         if df.empty:
             logger.error("No training data available")
             return None
+        
+        # Log data metrics
+        logger.info(f"Training data: {len(df)} players across {df['season'].nunique()} seasons")
+        if seasons:
+            logger.info(f"Seasons included: {seasons}")
+        else:
+            logger.info(f"Seasons included: {df['season'].unique().tolist()}")
         
         # Add position category feature
         df['position_category'] = df['position'].apply(
@@ -217,6 +424,8 @@ class PlayerValueModel:
         # If training position-specific models
         if self.position_specific:
             position_metrics = {}
+            position_counts = df['position_category'].value_counts().to_dict()
+            logger.info(f"Position distribution: {position_counts}")
             
             # Train a separate model for each position category
             for position, position_df in df.groupby('position_category'):
@@ -292,9 +501,11 @@ class PlayerValueModel:
                     "test_mae": mean_absolute_error(y_test, y_pred_test),
                     "test_rmse": np.sqrt(mean_squared_error(y_test, y_pred_test)),
                     "test_r2": r2_score(y_test, y_pred_test),
+                    "data_size": len(position_df),
+                    "feature_count": len(features)
                 }
                 
-                logger.info(f"Position {position} model: Test R² score: {pos_metrics['test_r2']:.4f}")
+                logger.info(f"Position {position} model: Test R² score: {pos_metrics['test_r2']:.4f}, RMSE: {pos_metrics['test_rmse']:.2f}")
                 
                 # Store model and metrics
                 self.position_models[position] = {
@@ -349,6 +560,12 @@ class PlayerValueModel:
             X, y, test_size=test_size, random_state=42
         )
         
+        logger.info(f"Train set: {len(X_train)} samples, Test set: {len(X_test)} samples")
+        
+        # Log target variable distribution
+        logger.info(f"Market value range: €{y.min()/1000000:.2f}M - €{y.max()/1000000:.2f}M")
+        logger.info(f"Market value mean: €{y.mean()/1000000:.2f}M, median: €{y.median()/1000000:.2f}M")
+        
         # Scale features
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
@@ -375,13 +592,39 @@ class PlayerValueModel:
             "test_mae": mean_absolute_error(y_test, y_pred_test),
             "test_rmse": np.sqrt(mean_squared_error(y_test, y_pred_test)),
             "test_r2": r2_score(y_test, y_pred_test),
+            "data_size": len(df),
+            "feature_count": len(features),
+            "train_size": len(X_train),
+            "test_size": len(X_test),
+            "market_value_min": float(y.min()),
+            "market_value_max": float(y.max()),
+            "market_value_mean": float(y.mean()),
+            "market_value_median": float(y.median()),
+            "training_date": datetime.now().isoformat(),
         }
+        
+        # Calculate percentage error
+        with np.errstate(divide='ignore', invalid='ignore'):
+            pct_errors = np.abs(y_pred_test - y_test) / y_test * 100
+            # Replace infinity and NaN with a high value (1000%)
+            pct_errors = np.nan_to_num(pct_errors, nan=1000, posinf=1000)
+            pct_error = np.mean(pct_errors)
+            metrics["test_pct_error"] = float(pct_error)
         
         if self.position_specific:
             metrics['position_metrics'] = position_metrics
         
         self.metrics = metrics
-        logger.info(f"General model training complete. Test R² score: {metrics['test_r2']:.4f}")
+        
+        # Log detailed results
+        logger.info("====================================================")
+        logger.info("TRAINING RESULTS:")
+        logger.info(f"Training R² score: {metrics['train_r2']:.4f}")
+        logger.info(f"Test R² score: {metrics['test_r2']:.4f}")
+        logger.info(f"Test RMSE: {metrics['test_rmse']:.2f}")
+        logger.info(f"Test MAE: {metrics['test_mae']:.2f}")
+        logger.info(f"Test Percentage Error: {metrics['test_pct_error']:.2f}%")
+        logger.info("====================================================")
         
         # Calculate feature importance
         if hasattr(self.model, 'feature_importances_'):
@@ -391,11 +634,32 @@ class PlayerValueModel:
             }).sort_values('importance', ascending=False)
             
             logger.info("Top 10 important features:")
-            logger.info(self.feature_importance.head(10))
+            for i, (feature, importance) in enumerate(zip(
+                self.feature_importance['feature'].head(10),
+                self.feature_importance['importance'].head(10)
+            )):
+                logger.info(f"{i+1}. {feature}: {importance:.4f}")
         
         # Save model
         if save_model:
             self.save_model()
+        
+        # Save metrics
+        metrics_path = save_metrics_to_json(metrics, self.model_type, tag)
+        
+        # Try to compare with previous metrics
+        try:
+            comparison = compare_metrics(metrics, model_type=self.model_type)
+            if comparison:
+                metrics['comparison'] = comparison
+        except Exception as e:
+            logger.warning(f"Could not compare with previous metrics: {e}")
+        
+        # Calculate training time
+        training_end_time = datetime.now()
+        training_time = (training_end_time - training_start_time).total_seconds()
+        logger.info(f"Total training time: {training_time:.2f} seconds")
+        metrics['training_time_seconds'] = training_time
         
         return metrics
         
