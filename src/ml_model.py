@@ -81,9 +81,29 @@ def save_metrics_to_json(metrics, model_type="random_forest", tag=None):
             "metrics": metrics
         }
         
+        # Convert numpy types to Python native types for JSON serialization
+        def convert_numpy_types(obj):
+            if isinstance(obj, dict):
+                return {k: convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(i) for i in obj]
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            else:
+                return obj
+                
+        # Convert all numpy types
+        serializable_metrics = convert_numpy_types(metrics_with_meta)
+        
         # Write metrics to file
         with open(file_path, 'w') as f:
-            json.dump(metrics_with_meta, f, indent=2)
+            json.dump(serializable_metrics, f, indent=2)
             
         logger.info(f"Metrics saved to {file_path}")
         return file_path
@@ -189,23 +209,23 @@ def compare_metrics(current_metrics, previous_metrics=None, model_type="random_f
         "previous": previous_test_metrics,
         "changes": {
             "r2": {
-                "absolute": r2_change,
-                "percentage": r2_pct_change,
-                "improved": r2_change > 0
+                "absolute": float(r2_change),
+                "percentage": float(r2_pct_change),
+                "improved": bool(r2_change > 0)
             },
             "rmse": {
-                "absolute": rmse_change,
-                "percentage": rmse_pct_change,
-                "improved": rmse_change > 0
+                "absolute": float(rmse_change),
+                "percentage": float(rmse_pct_change),
+                "improved": bool(rmse_change > 0)
             },
             "mae": {
-                "absolute": mae_change,
-                "percentage": mae_pct_change,
-                "improved": mae_change > 0
+                "absolute": float(mae_change),
+                "percentage": float(mae_pct_change),
+                "improved": bool(mae_change > 0)
             }
         },
         "summary": {
-            "overall_improved": (r2_change > 0 and rmse_change > 0 and mae_change > 0)
+            "overall_improved": bool(r2_change > 0 and rmse_change > 0 and mae_change > 0)
         }
     }
     

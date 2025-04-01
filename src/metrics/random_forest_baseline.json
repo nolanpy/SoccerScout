@@ -1,0 +1,55 @@
+{
+  "model_type": "random_forest",
+  "timestamp": "2025-04-01T08:43:24.200755",
+  "tag": "baseline_random_forest",
+  "metrics": {
+    "train_mae": 8438690.476190476,
+    "train_rmse": 12115359.44674402,
+    "train_r2": 0.9069163117699002,
+    "test_mae": 20328571.42857143,
+    "test_rmse": 30683255.089008123,
+    "test_r2": 0.3892993969257924,
+    "data_size": 105,
+    "feature_count": 47,
+    "train_size": 84,
+    "test_size": 21,
+    "market_value_min": 15000000.0,
+    "market_value_max": 180000000.0,
+    "market_value_mean": 74761904.76190476,
+    "market_value_median": 65000000.0,
+    "training_date": "2025-04-01T08:43:24.134784",
+    "test_pct_error": 52.78526367812081,
+    "position_metrics": {
+      "defender": {
+        "train_mae": 2312500.0,
+        "train_rmse": 2371708.2451262847,
+        "train_r2": 0.964,
+        "test_mae": 7500000.0,
+        "test_rmse": 7830229.881682913,
+        "test_r2": 0.6075999999999999,
+        "data_size": 10,
+        "feature_count": 47
+      },
+      "forward": {
+        "train_mae": 10311458.333333334,
+        "train_rmse": 14925078.517381407,
+        "train_r2": 0.9055582290593258,
+        "test_mae": 22295833.333333332,
+        "test_rmse": 31579202.676234033,
+        "test_r2": 0.48021561849606365,
+        "data_size": 60,
+        "feature_count": 47
+      },
+      "midfielder": {
+        "train_mae": 5994642.857142857,
+        "train_rmse": 7157794.203324294,
+        "train_r2": 0.9071648003697925,
+        "test_mae": 16471428.57142857,
+        "test_rmse": 18859840.17505375,
+        "test_r2": 0.44316341853035146,
+        "data_size": 35,
+        "feature_count": 47
+      }
+    }
+  }
+}

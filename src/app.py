@@ -1,11 +1,27 @@
 # backend/app.py
 import pandas as pd
+import numpy as np
+import json
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import database as db
 
+# Custom JSON encoder to handle NumPy types
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        return super(NumpyEncoder, self).default(obj)
+
 app = Flask(__name__)
+app.json_encoder = NumpyEncoder
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Serve index.html at the root URL
@@ -358,11 +374,13 @@ def train_model():
                     previous_metrics.get("metrics"),
                     model_type
                 )
+                
                 if comparison:
                     result["comparison_with_baseline"] = comparison
         except Exception as e:
             import traceback
             result["comparison_error"] = str(e)
+            result["comparison_traceback"] = traceback.format_exc()
         
         return jsonify(result)
     except Exception as e:
@@ -455,6 +473,7 @@ def compare_model_runs():
         
         if not comparison:
             return jsonify({"error": "Failed to generate comparison"}), 500
+            
             
         # Create response with detailed metrics
         response = {
