@@ -38,32 +38,37 @@ The current version uses simulated player data in a SQLite database, with plans 
 
 SoccerScout now includes a comprehensive machine learning system to predict player market values and identify undervalued talent:
 
-1. **Position-Specific Models**: 
+1. **Position-Specific Models**:
+
    - Separate models for forwards, midfielders, defenders, and goalkeepers
    - Position-appropriate weighting of statistics (offensive vs. defensive)
    - Accounts for position-specific market dynamics (forwards typically cost more)
    - Falls back to general model when position-specific data is limited
 
 2. **Age-Adjusted Evaluation**:
+
    - Incorporates player age into market value predictions
    - Models peak value curve (typically around age 27)
    - Boosts values for young players showing high performance (potential)
    - Accounts for declining values in older players
    - Enables meaningful comparisons between players of different ages
 
-3. **Multiple ML Algorithms**: 
+3. **Multiple ML Algorithms**:
+
    - Random Forest Regressor (default)
    - Gradient Boosting Regressor
    - Ridge Regression
    - Lasso Regression
 
 4. **Historical Data Analysis**:
+
    - Uses 6 seasons of data (2018-2023) to train models
    - Predicts current season (2023-2024) market values
    - Evaluates prediction accuracy season-by-season
    - Improves models by learning from historical trends
 
 5. **Feature Importance Analysis**:
+
    - Identifies which statistics most strongly correlate with market value
    - Automatically adjusts statistical weights based on ML insights
    - Generates optimal weights for the player evaluation algorithm
@@ -78,34 +83,40 @@ SoccerScout now includes a comprehensive machine learning system to predict play
 ## ML Metrics Explained
 
 ### R² Score (Coefficient of Determination)
+
 - **What it means**: R² measures how well the model's predictions explain the variation in the actual player market values.
 - **Interpretation**: Ranges from 0 to 1, where 1 means perfect prediction.
 - **Practical value**: Higher R² indicates the model better captures what determines a player's market value.
 
 ### RMSE (Root Mean Squared Error)
+
 - **What it means**: The square root of the average squared difference between predicted and actual market values.
 - **Interpretation**: Lower is better; shows the average magnitude of prediction errors in the same units as market value (euros).
 - **Practical value**: Helps scouts understand the expected margin of error in predictions.
 
 ### MAE (Mean Absolute Error)
+
 - **What it means**: The average absolute difference between predicted and actual market values.
 - **Interpretation**: Lower is better; more intuitive than RMSE as it's a direct average of errors.
 - **Practical value**: Easier for non-technical users to understand - "on average, predictions are off by €X million".
 
 ### Percentage Error
+
 - **What it means**: The average percentage by which predictions differ from actual values.
 - **Interpretation**: Lower is better; helpful for comparing errors across players with different market values.
 - **Practical value**: Helps identify whether predictions are more accurate for high or low-value players.
 
 ### Value Ratio
+
 - **What it means**: The ratio of predicted value to actual market value.
-- **Interpretation**: 
+- **Interpretation**:
   - Ratio > 1.5: Player is undervalued (worth more than market price)
   - 0.7 <= Ratio <= 1.5: Fair value
   - Ratio < 0.7: Player is overvalued (worth less than market price)
 - **Practical value**: The core metric for talent scouts to identify market inefficiencies and potential bargains.
 
 ### Feature Importance
+
 - **What it means**: Indicates which player statistics most heavily influence market value predictions.
 - **Interpretation**: Higher values indicate greater impact on player valuation.
 - **Practical value**: Helps scouts understand which skills and statistics truly drive player market values.
@@ -115,16 +126,19 @@ SoccerScout now includes a comprehensive machine learning system to predict play
 The system now includes comprehensive tools to track and compare model performance across different datasets and configurations:
 
 1. **Performance Logging**
+
    - Detailed logs of training process and metrics
    - Standardized metrics format for easy comparison
    - Timestamps and configuration details preserved
 
 2. **Metrics Storage**
+
    - JSON-based storage of model metrics
    - Organized by model type and custom tags
    - Preserves data characteristics for context
 
 3. **Run Tagging**
+
    - Tag each training run (e.g., "baseline", "more_data", "real_data")
    - Compare performance between specific tagged runs
    - Track progress over time with sequential tags
@@ -137,16 +151,19 @@ The system now includes comprehensive tools to track and compare model performan
 ### How to Track Performance When Adding Data
 
 1. First, establish a baseline:
+
    ```
    http://localhost:5000/train-model?tag=baseline
    ```
 
 2. After adding more data, create a new tagged run:
+
    ```
    http://localhost:5000/train-model?tag=more_data
    ```
 
 3. Compare the performance:
+
    ```
    http://localhost:5000/compare-model-runs?baseline_tag=baseline&comparison_tag=more_data
    ```
@@ -189,18 +206,20 @@ The system now includes comprehensive tools to track and compare model performan
 ## API Endpoints
 
 ### Core Endpoints
+
 - `/players` - Get all players with scores and stats
 - `/player/<id>` - Get detailed stats for a specific player
 - `/top-undervalued` - Get top 10 undervalued players
 - `/stats-distribution` - Get statistical distributions for key metrics
 
 ### Machine Learning Endpoints
+
 - `/ml-predictions` - Get market value predictions with position and age adjustments
   - Query params: `position_specific` (true/false), `age_adjusted` (true/false)
 - `/compare-players` - Compare players within the same position and/or age group
   - Query params: `position` (e.g., 'CF' or 'forward'), `age_group` (e.g., 'youth', 'prime'), `player_id` (to specify a reference player)
 - `/train-model` - Train the ML model and get performance metrics
-  - Query params: 
+  - Query params:
     - `tag` (e.g., 'baseline', 'more_data') - Tag to identify this training run
     - `model_type` ('random_forest', 'gradient_boosting', 'ridge', 'lasso')
     - `position_specific` (true/false)
@@ -226,8 +245,29 @@ Free:
 - Understat
 - Whoscored
 
+## Data Collection Ethics and Legality
+
+### FBref Data Scraping
+
+SoccerScout uses data from FBref.com for player statistics. My data collection approach is designed to be ethical and respectful:
+
+1. **Rate Limiting**: My scraper implements proper rate limiting with random delays between requests (3-6 seconds) to avoid overloading FBref's servers.
+
+2. **Respectful Access**: I follow robots.txt guidelines and only access publicly available data that doesn't require authentication.
+
+3. **Minimal Requests**: I cache results and only request pages when necessary, minimizing server load.
+
+4. **Attribution**: I clearly credit FBref as the data source and do not claim ownership of their data.
+
+5. **No Competitive Product**: I am not creating a competitive product to FBref, only using their data for analysis.
+
+6. **User-Agent Declaration**: I use a proper User-Agent string to identify my scraper.
+
+I follow best practices to ensure my activities remain ethical and sustainable. For production use at larger scale, purchasing data from official providers like Opta or Wyscout would be implemented.
+
 ## Resources:
 
 - [Scraping FBref with Python](https://medium.com/@ricardoandreom/how-to-scrape-and-personalize-data-from-fbref-with-python-a-guide-to-unlocking-football-insights-7e623607afca)
 - [Soccer API Scraping Guide](https://ctomashot.medium.com/how-i-scraped-an-api-for-my-soccer-scouting-app-c67df68da6ca)
 - [Machine Learning Algorithms Overview](https://builtin.com/data-science/tour-top-10-algorithms-machine-learning-newbies)
+- [Web Scraping Best Practices](https://www.scrapehero.com/how-to-prevent-getting-blacklisted-while-scraping/)
