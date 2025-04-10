@@ -424,9 +424,15 @@ def convert_to_database_schema(player_info):
     
     # Process stats by season
     seasons_stats = []
+    
+    # We only process the most recent seasons (2019 onwards) because:
+    # 1. Advanced stats like xG are more reliably tracked in recent seasons
+    # 2. Older data may have inconsistent formats or missing important metrics
+    # 3. Recent data is more relevant for performance analysis
     for season, season_data in player_info.get('organized_stats', {}).items():
-        # Only process relatively recent seasons
-        if not season[0:4].isdigit() or int(season[0:4]) < 2017:
+        # Only process recent seasons with advanced stats (2019 onwards)
+        if not season[0:4].isdigit() or int(season[0:4]) < 2019:
+            logger.info(f"Skipping season {season} - only collecting data from 2019 onwards")
             continue
             
         stats = {}
@@ -523,22 +529,32 @@ def convert_to_database_schema(player_info):
             stats['aerial_duels_won'] = int(def_stats.get('aerials_won', '0').replace(',', '')) if def_stats.get('aerials_won', '0').replace(',', '').isdigit() else 0
             stats['aerial_duels_total'] = stats['aerial_duels_won'] * 2  # Estimate total from won
         
-        # Add other stats with defaults
-        if 'penalty_box_touches' not in stats:
-            stats['penalty_box_touches'] = int(stats.get('progressive_carries', 0) / 2)  # Estimate
-            
-        if 'dribbles_attempted' not in stats:
-            stats['dribbles_attempted'] = int(stats.get('progressive_carries', 0) / 2)  # Estimate
-            
-        if 'dribbles_completed' not in stats:
-            stats['dribbles_completed'] = int(stats.get('dribbles_attempted', 0) * 0.6)  # Estimate 60% completion
-            
-        if 'ball_recoveries' not in stats:
-            stats['ball_recoveries'] = stats.get('interceptions', 0) * 3  # Estimate
-            
-        if 'high_intensity_runs' not in stats:
-            stats['high_intensity_runs'] = int(stats.get('progressive_carries', 0) * 1.5)  # Estimate
-            
+        # Use NULL (None) for stats that are not available in FBref
+        # This ensures we don't use made-up values for metrics we can't actually measure
+        fields_to_nullify = [
+            'progressive_carries',
+            'progressive_passes',
+            'progressive_passes_received',
+            'penalty_box_touches',
+            'dribbles_completed',
+            'dribbles_attempted',
+            'pressures',
+            'pressure_success_rate',
+            'aerial_duels_won',
+            'aerial_duels_total',
+            'high_intensity_runs',
+            'final_third_passes_completed',
+            'final_third_passes_attempted',
+            'ball_recoveries'
+        ]
+        
+        # Set these fields to NULL/None if they're not already in the stats
+        for field in fields_to_nullify:
+            if field not in stats or stats.get(field, 0) == 0:
+                stats[field] = None
+                logger.debug(f"Set {field} to NULL for season {season}")
+        
+        # Keep distance_covered estimation as it's a reasonable calculation
         if 'distance_covered' not in stats:
             # Estimate based on position and minutes
             if stats.get('minutes_played', 0) > 0:
