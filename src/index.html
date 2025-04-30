@@ -265,6 +265,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="all-players">All Players</div>
       <div class="tab" data-tab="undervalued">Top Undervalued</div>
+      <div class="tab" data-tab="transfer-analysis">Transfer Value Analysis</div>
       <div class="tab" data-tab="distributions">Stat Distributions</div>
     </div>
     
@@ -290,6 +291,24 @@
         </div>
         <div id="undervalued-grid" class="player-grid">
           <div class="loading">Loading undervalued players...</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="transfer-analysis" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Transfer Value Analysis</h2>
+          <button class="btn btn-primary" id="refresh-analysis">Refresh Analysis</button>
+        </div>
+        <div class="value-filters" style="margin-bottom: 20px; display: flex; gap: 10px;">
+          <button class="filter-btn btn btn-primary active" data-filter="all">All Players</button>
+          <button class="filter-btn btn" data-filter="undervalued">Undervalued</button>
+          <button class="filter-btn btn" data-filter="overvalued">Overvalued</button>
+          <button class="filter-btn btn" data-filter="fair">Fair Value</button>
+        </div>
+        <div id="transfer-analysis-grid" class="player-grid">
+          <div class="loading">Loading transfer value analysis...</div>
         </div>
       </div>
     </div>
@@ -326,12 +345,16 @@
     
     // Format currency
     function formatCurrency(value) {
+      if (value === null || value === undefined || isNaN(value)) {
+        return '€0.0M';
+      }
       const mill = value / 1000000;
       return '€' + mill.toFixed(1) + 'M';
     }
     
     // Get value indicator class
     function getValueIndicatorClass(ratio) {
+      if (!ratio || isNaN(ratio)) return 'fairly-valued';
       if (ratio > 1.5) return 'undervalued';
       if (ratio < 0.7) return 'overvalued';
       return 'fairly-valued';
@@ -339,6 +362,7 @@
     
     // Get value text
     function getValueText(ratio) {
+      if (!ratio || isNaN(ratio)) return 'Fair Value';
       if (ratio > 1.5) return 'Undervalued';
       if (ratio < 0.7) return 'Overvalued';
       return 'Fair Value';
@@ -488,6 +512,157 @@
       .catch(error => {
         document.getElementById('undervalued-grid').innerHTML = 
           `<div class="error">Error loading undervalued player data: ${error.message}</div>`;
+      });
+    
+    // Fetch and display transfer value analysis
+    fetch('/transfer-value-predictions')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        const analysisGrid = document.getElementById('transfer-analysis-grid');
+        analysisGrid.innerHTML = ''; // Clear loading
+        
+        if (!data.players || data.players.length === 0) {
+          analysisGrid.innerHTML = '<div class="error">No transfer value analysis data available</div>';
+          return;
+        }
+        
+        // Set up analysis date
+        const dateElement = document.createElement('div');
+        dateElement.style.marginBottom = '15px';
+        dateElement.innerHTML = `<strong>Analysis Date:</strong> ${data.analysis_date}`;
+        analysisGrid.appendChild(dateElement);
+        
+        // Set up stats summary
+        const statsElement = document.createElement('div');
+        statsElement.style.marginBottom = '15px';
+        statsElement.style.padding = '10px';
+        statsElement.style.backgroundColor = '#f8f9fa';
+        statsElement.style.borderRadius = '5px';
+        
+        if (data.stats) {
+          statsElement.innerHTML = `
+            <strong>Analysis Summary:</strong>
+            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+              <span>Total Players: ${data.stats.total_players}</span>
+              <span>Undervalued: ${data.stats.undervalued_count}</span>
+              <span>Overvalued: ${data.stats.overvalued_count}</span>
+              <span>Fair Value: ${data.stats.fair_value_count}</span>
+            </div>
+          `;
+        }
+        analysisGrid.appendChild(statsElement);
+        
+        // Store all players for filtering
+        const allPlayers = data.players;
+        
+        // Function to render players based on filter
+        function renderPlayers(players) {
+          // Clear previous players
+          const existingCards = analysisGrid.querySelectorAll('.player-card');
+          existingCards.forEach(card => card.remove());
+          
+          players.forEach(player => {
+            const valueClass = getValueIndicatorClass(player.value_ratio);
+            const valueText = getValueText(player.value_ratio);
+            
+            const playerCard = document.createElement('div');
+            playerCard.className = 'card player-card';
+            playerCard.innerHTML = `
+              <div class="player-header">
+                <div>
+                  <div class="player-name">${player.name}</div>
+                  <div class="player-meta">
+                    <span>${player.age} years | ${player.position} | ${player.club}</span>
+                    <span class="value-indicator ${valueClass}">${valueText}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <span class="stat-name">Market Value</span>
+                  <span class="stat-value">${formatCurrency(player.market_value)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Predicted Value</span>
+                  <span class="stat-value">${formatCurrency(player.predicted_value)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Value Difference</span>
+                  <span class="stat-value ${player.value_difference > 0 ? 'highlight' : ''}">${formatCurrency(player.value_difference || 0)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Value Ratio</span>
+                  <span class="stat-value ${valueClass === 'undervalued' ? 'highlight' : ''}">${(player.value_ratio || 0).toFixed(2)}x</span>
+                </div>
+              </div>
+            `;
+            analysisGrid.appendChild(playerCard);
+          });
+          
+          if (players.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'card';
+            noResults.innerHTML = '<div class="error">No players match the selected filter</div>';
+            analysisGrid.appendChild(noResults);
+          }
+        }
+        
+        // Initial render of all players
+        renderPlayers(allPlayers);
+        
+        // Add event listeners to filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            // Remove active class from all buttons
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active', 'btn-primary'));
+            
+            // Add active class to clicked button
+            btn.classList.add('active', 'btn-primary');
+            
+            // Apply filter
+            const filter = btn.dataset.filter;
+            let filteredPlayers;
+            
+            if (filter === 'undervalued') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Undervalued');
+            } else if (filter === 'overvalued') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Overvalued');
+            } else if (filter === 'fair') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Fair Value');
+            } else {
+              filteredPlayers = allPlayers;
+            }
+            
+            renderPlayers(filteredPlayers);
+          });
+        });
+        
+        // Add refresh functionality
+        document.getElementById('refresh-analysis').addEventListener('click', () => {
+          fetch('/analyze-transfer-values?force=true')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(result => {
+              // Reload the page to see fresh results
+              window.location.reload();
+            })
+            .catch(error => {
+              alert(`Error refreshing analysis: ${error.message}`);
+            });
+        });
+      })
+      .catch(error => {
+        document.getElementById('transfer-analysis-grid').innerHTML = 
+          `<div class="error">Error loading transfer value analysis: ${error.message}</div>`;
       });
     
     // Fetch and display stat distributions

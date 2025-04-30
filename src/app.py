@@ -13,6 +13,11 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
+            # Handle NaN, Infinity, etc.
+            if np.isnan(obj):
+                return None
+            if np.isinf(obj):
+                return None if obj < 0 else 1e38  # Use a very large number for +inf, null for -inf
             return float(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
@@ -508,6 +513,151 @@ def compare_model_runs():
         import traceback
         return jsonify({
             "error": "Error comparing model runs", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/transfer-value-predictions')
+def get_transfer_value_predictions():
+    """Get market value predictions using the enhanced transfer value model"""
+    try:
+        from flask import request
+        import json
+        import os
+        import pandas as pd
+        import numpy as np
+
+        # See if we have a recent analysis
+        METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
+        analysis_files = [f for f in os.listdir(METRICS_DIR) if f.startswith('value_analysis_')]
+        
+        if not analysis_files:
+            # No analysis files found, let's run the analysis
+            import train_with_new_data
+            analysis_success = train_with_new_data.run_analysis()
+            
+            if not analysis_success:
+                return jsonify({"error": "Failed to generate transfer value analysis"}), 500
+                
+            # Check again for analysis files
+            analysis_files = [f for f in os.listdir(METRICS_DIR) if f.startswith('value_analysis_')]
+        
+        if not analysis_files:
+            return jsonify({"error": "No transfer value analysis found"}), 500
+        
+        # Get the most recent analysis file
+        latest_analysis = max(
+            [os.path.join(METRICS_DIR, f) for f in analysis_files],
+            key=os.path.getmtime
+        )
+        
+        # Load the analysis results
+        with open(latest_analysis, 'r') as f:
+            analysis = json.load(f)
+        
+        # Process results for the API
+        undervalued_players = analysis.get('undervalued', [])
+        overvalued_players = analysis.get('overvalued', [])
+        fair_value_players = analysis.get('fair_value', [])
+        all_players = analysis.get('all_players', [])
+        stats = analysis.get('stats', {})
+        
+        # Get query parameters
+        status_filter = request.args.get('status', '').lower()  # 'undervalued', 'overvalued', 'fair'
+        position = request.args.get('position', '').upper()     # 'CF', 'CM', etc.
+        
+        # Apply filters
+        if status_filter == 'undervalued':
+            filtered_players = undervalued_players
+        elif status_filter == 'overvalued':
+            filtered_players = overvalued_players
+        elif status_filter == 'fair':
+            filtered_players = fair_value_players
+        else:
+            filtered_players = all_players
+            
+        # Filter by position if specified
+        if position:
+            filtered_players = [p for p in filtered_players if p.get('position') == position]
+        
+        # Sort players by value ratio (most extreme differences first)
+        if status_filter == 'overvalued':
+            # For overvalued, lower ratio is more extreme
+            sorted_players = sorted(filtered_players, key=lambda p: p.get('value_ratio', 1.0))
+        else:
+            # For undervalued and default, higher ratio is more extreme
+            sorted_players = sorted(filtered_players, key=lambda p: p.get('value_ratio', 1.0), reverse=True)
+        
+        # Create response
+        response = {
+            "filters": {
+                "status": status_filter,
+                "position": position
+            },
+            "stats": stats,
+            "analysis_date": os.path.basename(latest_analysis).split('_', 1)[1].split('.')[0],  # Extract timestamp from filename
+            "players": sorted_players
+        }
+        
+        return jsonify(response)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error getting transfer value predictions", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/analyze-transfer-values')
+def analyze_transfer_values():
+    """Run analysis on market values to find undervalued and overvalued players"""
+    try:
+        # Import and run analysis
+        import train_with_new_data
+        
+        # Get force parameter (to force retraining)
+        from flask import request
+        force = request.args.get('force', 'false').lower() == 'true'
+        
+        if force:
+            # If force is true, always run a new analysis
+            analysis_success = train_with_new_data.run_analysis()
+        else:
+            # Check if we have a recent analysis (less than 1 hour old)
+            METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
+            analysis_files = [f for f in os.listdir(METRICS_DIR) if f.startswith('value_analysis_')]
+            
+            if not analysis_files:
+                # No analysis files found, run the analysis
+                analysis_success = train_with_new_data.run_analysis()
+            else:
+                # Get the most recent analysis file
+                latest_analysis = max(
+                    [os.path.join(METRICS_DIR, f) for f in analysis_files],
+                    key=os.path.getmtime
+                )
+                
+                # Check if it's less than 1 hour old
+                import time
+                age_in_hours = (time.time() - os.path.getmtime(latest_analysis)) / 3600
+                
+                if age_in_hours > 1:
+                    # Analysis is more than 1 hour old, run a new one
+                    analysis_success = train_with_new_data.run_analysis()
+                else:
+                    # Analysis is recent, use it
+                    analysis_success = True
+        
+        if not analysis_success:
+            return jsonify({"error": "Failed to analyze transfer values"}), 500
+            
+        # Redirect to the transfer-value-predictions endpoint
+        from flask import redirect
+        return redirect('/transfer-value-predictions')
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error analyzing transfer values", 
             "details": str(e),
             "traceback": traceback.format_exc()
         }), 500
