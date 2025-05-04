@@ -263,9 +263,7 @@
   
   <div class="container">
     <div class="tabs">
-      <div class="tab active" data-tab="all-players">All Players</div>
-      <div class="tab" data-tab="undervalued">Top Undervalued</div>
-      <div class="tab" data-tab="transfer-analysis">Transfer Value Analysis</div>
+      <div class="tab active" data-tab="transfer-analysis">Player Value Analysis</div>
       <div class="tab" data-tab="distributions">Stat Distributions</div>
     </div>
     
@@ -273,32 +271,10 @@
       <input type="text" id="player-search" placeholder="Search players by name, club, or position...">
     </div>
     
-    <div id="all-players" class="tab-content active">
+    <div id="transfer-analysis" class="tab-content active">
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">All Players Ranked</h2>
-        </div>
-        <div id="player-grid" class="player-grid">
-          <div class="loading">Loading player data...</div>
-        </div>
-      </div>
-    </div>
-    
-    <div id="undervalued" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Top Undervalued Players</h2>
-        </div>
-        <div id="undervalued-grid" class="player-grid">
-          <div class="loading">Loading undervalued players...</div>
-        </div>
-      </div>
-    </div>
-    
-    <div id="transfer-analysis" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Transfer Value Analysis</h2>
+          <h2 class="card-title">Player Value Analysis</h2>
           <button class="btn btn-primary" id="refresh-analysis">Refresh Analysis</button>
         </div>
         <div class="value-filters" style="margin-bottom: 20px; display: flex; gap: 10px;">
@@ -340,12 +316,18 @@
         // Add active class to clicked tab and corresponding content
         tab.classList.add('active');
         document.getElementById(tab.dataset.tab).classList.add('active');
+        
+        // Reinitialize search when switching tabs
+        initializeSearch();
+        
+        // Clear search field when switching tabs
+        document.getElementById('player-search').value = '';
       });
     });
     
     // Format currency
     function formatCurrency(value) {
-      if (value === null || value === undefined || isNaN(value)) {
+      if (value === null || value === undefined || isNaN(value) || value === 0) {
         return '€0.0M';
       }
       const mill = value / 1000000;
@@ -368,151 +350,10 @@
       return 'Fair Value';
     }
     
-    // Fetch and display all players
-    fetch('/players')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(players => {
-        const playerGrid = document.getElementById('player-grid');
-        playerGrid.innerHTML = ''; // Clear loading
-        
-        if (players.length === 0) {
-          playerGrid.innerHTML = '<div class="error">No player data available</div>';
-          return;
-        }
-        
-        players.forEach(player => {
-          const valueClass = getValueIndicatorClass(player.value_ratio);
-          const valueText = getValueText(player.value_ratio);
-          
-          const playerCard = document.createElement('div');
-          playerCard.className = 'card player-card';
-          playerCard.innerHTML = `
-            <div class="player-header">
-              <div>
-                <div class="player-name">${player.name}</div>
-                <div class="player-meta">
-                  <span>${player.age} years | ${player.position} | ${player.club}</span>
-                  <span class="value-indicator ${valueClass}">${valueText}</span>
-                </div>
-              </div>
-            </div>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-name">Performance Score</span>
-                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Market Value</span>
-                <span class="stat-value">${formatCurrency(player.market_value)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Goals</span>
-                <span class="stat-value">${player.goals}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Assists</span>
-                <span class="stat-value">${player.assists}</span>
-              </div>
-            </div>
-            <div class="player-details" id="details-${player.id}">
-              <div class="stats-grid" style="margin-top: 15px;">
-                <div class="stat-item">
-                  <span class="stat-name">xG</span>
-                  <span class="stat-value">${player.xg.toFixed(2)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">xA</span>
-                  <span class="stat-value">${player.xa.toFixed(2)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">SCA</span>
-                  <span class="stat-value">${player.sca}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">GCA</span>
-                  <span class="stat-value">${player.gca}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">Tackles</span>
-                  <span class="stat-value">${player.tackles}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">Interceptions</span>
-                  <span class="stat-value">${player.interceptions}</span>
-                </div>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-sm" style="margin-top: 10px;" 
-              onclick="toggleDetails(${player.id})">Show Details</button>
-          `;
-          playerGrid.appendChild(playerCard);
-        });
-        
-        // Initialize search functionality after loading players
-        initializeSearch();
-      })
-      .catch(error => {
-        document.getElementById('player-grid').innerHTML = 
-          `<div class="error">Error loading player data: ${error.message}</div>`;
-      });
-    
-    // Fetch and display undervalued players
-    fetch('/top-undervalued')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(players => {
-        const undervaluedGrid = document.getElementById('undervalued-grid');
-        undervaluedGrid.innerHTML = ''; // Clear loading
-        
-        if (players.length === 0) {
-          undervaluedGrid.innerHTML = '<div class="error">No undervalued player data available</div>';
-          return;
-        }
-        
-        players.forEach(player => {
-          const playerCard = document.createElement('div');
-          playerCard.className = 'card player-card';
-          playerCard.innerHTML = `
-            <div class="player-header">
-              <div>
-                <div class="player-name">${player.name}</div>
-                <div class="player-meta">
-                  <span>${player.age} years | ${player.position} | ${player.club}</span>
-                  <span class="value-indicator undervalued">Undervalued</span>
-                </div>
-              </div>
-            </div>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-name">Performance Score</span>
-                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Market Value</span>
-                <span class="stat-value">${formatCurrency(player.market_value)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Value Ratio</span>
-                <span class="stat-value highlight">${player.value_ratio.toFixed(2)}</span>
-              </div>
-            </div>
-          `;
-          undervaluedGrid.appendChild(playerCard);
-        });
-      })
-      .catch(error => {
-        document.getElementById('undervalued-grid').innerHTML = 
-          `<div class="error">Error loading undervalued player data: ${error.message}</div>`;
-      });
+    // Initialize search functionality after content loads
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeSearch();
+    });
     
     // Fetch and display transfer value analysis
     fetch('/transfer-value-predictions')
@@ -584,6 +425,10 @@
               </div>
               <div class="stats-grid">
                 <div class="stat-item">
+                  <span class="stat-name">Performance</span>
+                  <span class="stat-value highlight">${player.performance_score !== null && !isNaN(player.performance_score) ? player.performance_score.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div class="stat-item">
                   <span class="stat-name">Market Value</span>
                   <span class="stat-value">${formatCurrency(player.market_value)}</span>
                 </div>
@@ -593,13 +438,51 @@
                 </div>
                 <div class="stat-item">
                   <span class="stat-name">Value Difference</span>
-                  <span class="stat-value ${player.value_difference > 0 ? 'highlight' : ''}">${formatCurrency(player.value_difference || 0)}</span>
+                  <span class="stat-value ${player.value_difference && player.value_difference > 0 ? 'highlight' : ''}">${formatCurrency(player.value_difference || 0)}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-name">Value Ratio</span>
-                  <span class="stat-value ${valueClass === 'undervalued' ? 'highlight' : ''}">${(player.value_ratio || 0).toFixed(2)}x</span>
+                  <span class="stat-value ${valueClass === 'undervalued' ? 'highlight' : ''}">${player.value_ratio !== null && !isNaN(player.value_ratio) ? player.value_ratio.toFixed(2) : '0.00'}x</span>
                 </div>
               </div>
+              <div class="player-details" id="details-${player.id}">
+                <div class="stats-grid" style="margin-top: 15px;">
+                  <div class="stat-item">
+                    <span class="stat-name">Goals</span>
+                    <span class="stat-value">${player.goals !== undefined ? player.goals : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Assists</span>
+                    <span class="stat-value">${player.assists !== undefined ? player.assists : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">xG</span>
+                    <span class="stat-value">${player.xg !== null && !isNaN(player.xg) ? player.xg.toFixed(2) : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">xA</span>
+                    <span class="stat-value">${player.xa !== null && !isNaN(player.xa) ? player.xa.toFixed(2) : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">SCA</span>
+                    <span class="stat-value">${player.sca !== null && !isNaN(player.sca) ? player.sca : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">GCA</span>
+                    <span class="stat-value">${player.gca !== null && !isNaN(player.gca) ? player.gca : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Tackles</span>
+                    <span class="stat-value">${player.tackles !== null && !isNaN(player.tackles) ? player.tackles : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Interceptions</span>
+                    <span class="stat-value">${player.interceptions !== null && !isNaN(player.interceptions) ? player.interceptions : 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm" style="margin-top: 10px;" 
+                onclick="toggleDetails(${player.id})">Show Details</button>
             `;
             analysisGrid.appendChild(playerCard);
           });
@@ -741,10 +624,13 @@
     // Initialize search functionality
     function initializeSearch() {
       const searchInput = document.getElementById('player-search');
-      const playerCards = document.querySelectorAll('.player-card');
       
       searchInput.addEventListener('input', () => {
         const searchTerm = searchInput.value.toLowerCase();
+        
+        // Find all player cards in the currently active tab
+        const activeTab = document.querySelector('.tab-content.active');
+        const playerCards = activeTab.querySelectorAll('.player-card');
         
         playerCards.forEach(card => {
           const playerText = card.textContent.toLowerCase();

@@ -2,12 +2,13 @@
 import pandas as pd
 import numpy as np
 import json
+import math
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import database as db
 
-# Custom JSON encoder to handle NumPy types
+# Custom JSON encoder to handle NumPy types and data cleaning
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -24,6 +25,32 @@ class NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, np.bool_):
             return bool(obj)
         return super(NumpyEncoder, self).default(obj)
+    
+    def encode(self, obj):
+        # Clean up any Python native NaN/inf values before encoding
+        if isinstance(obj, dict):
+            cleaned_dict = {}
+            for k, v in obj.items():
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    cleaned_dict[k] = None
+                else:
+                    cleaned_dict[k] = v
+            return super(NumpyEncoder, self).encode(cleaned_dict)
+        elif isinstance(obj, list):
+            cleaned_list = []
+            for item in obj:
+                if isinstance(item, dict):
+                    cleaned_dict = {}
+                    for k, v in item.items():
+                        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                            cleaned_dict[k] = None
+                        else:
+                            cleaned_dict[k] = v
+                    cleaned_list.append(cleaned_dict)
+                else:
+                    cleaned_list.append(item)
+            return super(NumpyEncoder, self).encode(cleaned_list)
+        return super(NumpyEncoder, self).encode(obj)
 
 app = Flask(__name__)
 app.json_encoder = NumpyEncoder
@@ -160,37 +187,100 @@ def calculate_market_value_ratio(row):
 
 @app.route('/players')
 def get_players():
-    # Get player data with statistics from the database
-    player_data = db.get_players_with_stats()
-    
-    if player_data.empty:
-        return jsonify([])
-    
-    # Calculate performance score based on weighted statistics
-    player_data['performance_score'] = calculate_player_score(player_data)
-    
-    # Calculate market value ratio to identify undervalued/overvalued players
-    player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
-    
-    # Calculate a combined score
-    player_data['combined_score'] = (
-        player_data['performance_score'] * 0.7 +  # 70% performance
-        player_data['value_ratio'] * 0.3          # 30% value for money
-    )
-    
-    # Select and rename columns for the API response
-    result_df = player_data[['id', 'name', 'age', 'position', 'club', 'league', 
-                           'market_value', 'performance_score', 'value_ratio', 
-                           'combined_score', 'goals', 'assists', 'xg', 'xa',
-                           'sca', 'gca', 'tackles', 'interceptions']]
-    
-    # Sort by combined score (descending)
-    sorted_players = result_df.sort_values(by='combined_score', ascending=False)
-    
-    # Convert to JSON
-    players_json = sorted_players.to_dict(orient='records')
-    
-    return jsonify(players_json)
+    try:
+        # Get player data with statistics from the database
+        player_data = db.get_players_with_stats()
+        
+        if player_data.empty:
+            return jsonify([])
+        
+        # Calculate performance score based on weighted statistics
+        player_data['performance_score'] = calculate_player_score(player_data)
+        
+        # Use the unified ML model for value predictions
+        import unified_ml_model
+        
+        # First check if we have analysis results from transfer value analysis
+        METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
+        analysis_files = [f for f in os.listdir(METRICS_DIR) if f.startswith('value_analysis_')]
+        
+        if analysis_files:
+            # Get the most recent analysis file
+            latest_analysis = max(
+                [os.path.join(METRICS_DIR, f) for f in analysis_files],
+                key=os.path.getmtime
+            )
+            
+            # Load the analysis results
+            try:
+                with open(latest_analysis, 'r') as f:
+                    analysis = json.load(f)
+                    
+                # Convert to DataFrame
+                if 'all_players' in analysis and analysis['all_players']:
+                    import pandas as pd
+                    predictions_df = pd.DataFrame(analysis['all_players'])
+                    logger.info(f"Loaded predictions from existing analysis: {latest_analysis}")
+                else:
+                    # Generate new predictions
+                    predictions_df = unified_ml_model.predict_current_values(
+                        position_specific=True,
+                        age_adjusted=True
+                    )
+            except Exception as e:
+                logger.error(f"Error loading analysis file: {e}")
+                # Fall back to generating new predictions
+                predictions_df = unified_ml_model.predict_current_values(
+                    position_specific=True,
+                    age_adjusted=True
+                )
+        else:
+            # Generate new predictions
+            predictions_df = unified_ml_model.predict_current_values(
+                position_specific=True,
+                age_adjusted=True
+            )
+        
+        if predictions_df is not None and not predictions_df.empty:
+            # Merge predictions with player data
+            merge_columns = ['id', 'predicted_value', 'value_ratio', 'value_difference']
+            player_data = player_data.merge(
+                predictions_df[merge_columns],
+                on='id',
+                how='left'
+            )
+        else:
+            # Fall back to simpler calculation if ML predictions fail
+            player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
+            player_data['predicted_value'] = player_data['market_value'] * player_data['value_ratio']
+            player_data['value_difference'] = player_data['predicted_value'] - player_data['market_value']
+        
+        # Calculate a combined score
+        player_data['combined_score'] = (
+            player_data['performance_score'] * 0.7 +  # 70% performance
+            player_data['value_ratio'] * 0.3          # 30% value for money
+        )
+        
+        # Select and rename columns for the API response
+        result_df = player_data[['id', 'name', 'age', 'position', 'club', 'league', 
+                               'market_value', 'performance_score', 'value_ratio', 
+                               'combined_score', 'goals', 'assists', 'xg', 'xa',
+                               'sca', 'gca', 'tackles', 'interceptions', 'predicted_value']]
+        
+        # Sort by combined score (descending)
+        sorted_players = result_df.sort_values(by='combined_score', ascending=False)
+        
+        # Convert to JSON
+        players_json = sorted_players.to_dict(orient='records')
+        
+        return jsonify(players_json)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error getting player data", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 
 @app.route('/player/<int:player_id>')
 def get_player_detail(player_id):
@@ -214,43 +304,129 @@ def get_player_detail(player_id):
 
 @app.route('/top-undervalued')
 def get_top_undervalued():
-    # Get player data with statistics
-    player_data = db.get_players_with_stats()
+    try:
+        # Get player data with statistics
+        player_data = db.get_players_with_stats()
+        
+        if player_data.empty:
+            return jsonify([])
+        
+        # Calculate performance score based on weighted statistics
+        player_data['performance_score'] = calculate_player_score(player_data)
+        
+        # Use the unified ML model for value predictions
+        import unified_ml_model
+        
+        # First check if we have analysis results from transfer value analysis
+        METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
+        analysis_files = [f for f in os.listdir(METRICS_DIR) if f.startswith('value_analysis_')]
+        
+        if analysis_files:
+            # Get the most recent analysis file
+            latest_analysis = max(
+                [os.path.join(METRICS_DIR, f) for f in analysis_files],
+                key=os.path.getmtime
+            )
+            
+            # Load the analysis results
+            try:
+                with open(latest_analysis, 'r') as f:
+                    analysis = json.load(f)
+                    
+                # Convert to DataFrame
+                if 'all_players' in analysis and analysis['all_players']:
+                    import pandas as pd
+                    predictions_df = pd.DataFrame(analysis['all_players'])
+                    logger.info(f"Loaded predictions from existing analysis: {latest_analysis}")
+                else:
+                    # Generate new predictions
+                    predictions_df = unified_ml_model.predict_current_values(
+                        position_specific=True,
+                        age_adjusted=True
+                    )
+            except Exception as e:
+                logger.error(f"Error loading analysis file: {e}")
+                # Fall back to generating new predictions
+                predictions_df = unified_ml_model.predict_current_values(
+                    position_specific=True,
+                    age_adjusted=True
+                )
+        else:
+            # Generate new predictions
+            predictions_df = unified_ml_model.predict_current_values(
+                position_specific=True,
+                age_adjusted=True
+            )
+        
+        if predictions_df is not None and not predictions_df.empty:
+            # Get undervalued players from predictions
+            undervalued_players = predictions_df[predictions_df['status'] == 'Undervalued'].copy()
+            
+            if len(undervalued_players) >= 5:
+                # Merge with original player data to get performance scores
+                undervalued_players = undervalued_players.merge(
+                    player_data[['id', 'performance_score']], 
+                    on='id',
+                    how='left'
+                )
+                
+                # Filter by average performance
+                avg_performance = player_data['performance_score'].mean()
+                undervalued_players = undervalued_players[
+                    undervalued_players['performance_score'] >= avg_performance
+                ]
+            else:
+                # Fall back to original method if not enough players from ML
+                player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
+                avg_performance = player_data['performance_score'].mean()
+                undervalued_players = player_data[
+                    (player_data['value_ratio'] > 1.5) & 
+                    (player_data['performance_score'] >= avg_performance)
+                ]
+        else:
+            # Fall back to original method if ML fails
+            player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
+            avg_performance = player_data['performance_score'].mean()
+            undervalued_players = player_data[
+                (player_data['value_ratio'] > 1.5) & 
+                (player_data['performance_score'] >= avg_performance)
+            ]
+        
+        # If we don't have enough players that meet the strict criteria, fall back to top value ratios
+        if len(undervalued_players) < 5:
+            # Just get players with above average performance, sorted by value ratio
+            undervalued_players = player_data[player_data['performance_score'] >= avg_performance]
+        
+        # Sort by value ratio (highest first - most undervalued)
+        top_undervalued = undervalued_players.sort_values(by='value_ratio', ascending=False).head(10)
+        
+        # Required columns for the response
+        needed_columns = ['id', 'name', 'age', 'position', 'club', 'league',
+                         'market_value', 'performance_score', 'value_ratio', 'predicted_value']
+        
+        # Ensure all required columns exist
+        for col in needed_columns:
+            if col not in top_undervalued.columns:
+                if col == 'predicted_value' and 'market_value' in top_undervalued.columns and 'value_ratio' in top_undervalued.columns:
+                    top_undervalued['predicted_value'] = top_undervalued['market_value'] * top_undervalued['value_ratio']
+                else:
+                    top_undervalued[col] = None
+        
+        # Select columns for the API response
+        result_df = top_undervalued[needed_columns]
+        
+        # Convert to JSON
+        undervalued_json = result_df.to_dict(orient='records')
+        
+        return jsonify(undervalued_json)
     
-    if player_data.empty:
-        return jsonify([])
-    
-    # Calculate performance score based on weighted statistics
-    player_data['performance_score'] = calculate_player_score(player_data)
-    
-    # Calculate market value ratio (higher = more undervalued)
-    player_data['value_ratio'] = player_data.apply(calculate_market_value_ratio, axis=1)
-    
-    # Consider a player undervalued if:
-    # 1. Their value ratio is greater than 1.5 (same as the frontend threshold)
-    # 2. They have at least average performance
-    avg_performance = player_data['performance_score'].mean()
-    undervalued = player_data[
-        (player_data['value_ratio'] > 1.5) & 
-        (player_data['performance_score'] >= avg_performance)
-    ]
-    
-    # If we don't have enough players that meet the strict criteria, fall back to top value ratios
-    if len(undervalued) < 5:
-        # Just get players with above average performance, sorted by value ratio
-        undervalued = player_data[player_data['performance_score'] >= avg_performance]
-    
-    # Sort by value ratio (highest first - most undervalued)
-    top_undervalued = undervalued.sort_values(by='value_ratio', ascending=False).head(10)
-    
-    # Select columns for the API response
-    result_df = top_undervalued[['id', 'name', 'age', 'position', 'club', 'league', 
-                               'market_value', 'performance_score', 'value_ratio']]
-    
-    # Convert to JSON
-    undervalued_json = result_df.to_dict(orient='records')
-    
-    return jsonify(undervalued_json)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Error getting undervalued players", 
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 
 @app.route('/stats-distribution')
 def get_stats_distribution():
@@ -285,8 +461,8 @@ def get_stats_distribution():
 def get_ml_predictions():
     """Get player market value predictions from ML model"""
     try:
-        # Import ML module
-        import ml_model
+        # Import unified ML module
+        import unified_ml_model
         from flask import request
         
         # Get query parameters
@@ -294,7 +470,7 @@ def get_ml_predictions():
         age_adjusted = request.args.get('age_adjusted', 'true').lower() == 'true'
         
         # Get predictions with specified parameters
-        predictions = ml_model.predict_current_values(
+        predictions = unified_ml_model.predict_current_values(
             position_specific=position_specific,
             age_adjusted=age_adjusted
         )
@@ -327,8 +503,8 @@ def get_ml_predictions():
 def train_model():
     """Train the ML model and return performance metrics"""
     try:
-        # Import ML module
-        import ml_model
+        # Import unified ML module
+        import unified_ml_model
         from flask import request
         
         # Get optional parameters
@@ -336,12 +512,14 @@ def train_model():
         model_type = request.args.get('model_type', 'random_forest')
         position_specific = request.args.get('position_specific', 'true').lower() == 'true'
         age_adjusted = request.args.get('age_adjusted', 'true').lower() == 'true'
+        time_series = request.args.get('time_series', 'true').lower() == 'true'
         
         # Create model with specified parameters
-        model = ml_model.PlayerValueModel(
+        model = unified_ml_model.UnifiedPlayerValueModel(
             model_type=model_type,
             position_specific=position_specific,
-            age_adjusted=age_adjusted
+            age_adjusted=age_adjusted,
+            time_series=time_series
         )
         
         # Train model with tag for tracking
@@ -350,38 +528,45 @@ def train_model():
         if metrics is None:
             return jsonify({"error": "Failed to train model"}), 500
             
-        # Get model performance by season
-        performance = model.analyze_model_performance(plot=True)
-        
-        if performance is not None:
-            performance_json = performance.to_dict(orient='records')
-        else:
-            performance_json = []
-        
         # Return metrics and performance
         result = {
             "training_settings": {
                 "tag": tag,
                 "model_type": model_type,
                 "position_specific": position_specific,
-                "age_adjusted": age_adjusted
+                "age_adjusted": age_adjusted,
+                "time_series": time_series
             },
-            "training_metrics": metrics,
-            "season_performance": performance_json
+            "training_metrics": metrics
         }
         
         # Try to retrieve and include comparison with previous runs
         try:
-            previous_metrics = ml_model.load_latest_metrics(model_type, tag="baseline")
+            previous_metrics = unified_ml_model.load_latest_metrics(model_type, tag="baseline")
             if previous_metrics and previous_metrics.get("metrics"):
-                comparison = ml_model.compare_metrics(
-                    metrics, 
-                    previous_metrics.get("metrics"),
-                    model_type
-                )
+                # Simple comparison of key metrics
+                current = metrics
+                previous = previous_metrics.get("metrics")
                 
-                if comparison:
-                    result["comparison_with_baseline"] = comparison
+                comparison = {
+                    "current": {
+                        "r2": current.get("test_r2"),
+                        "rmse": current.get("test_rmse"),
+                        "mae": current.get("test_mae")
+                    },
+                    "previous": {
+                        "r2": previous.get("test_r2"),
+                        "rmse": previous.get("test_rmse"),
+                        "mae": previous.get("test_mae")
+                    },
+                    "improvement": {
+                        "r2": (current.get("test_r2", 0) - previous.get("test_r2", 0)) / max(abs(previous.get("test_r2", 1)), 0.001) * 100,
+                        "rmse": (previous.get("test_rmse", 0) - current.get("test_rmse", 0)) / max(previous.get("test_rmse", 1), 0.001) * 100,
+                        "mae": (previous.get("test_mae", 0) - current.get("test_mae", 0)) / max(previous.get("test_mae", 1), 0.001) * 100
+                    }
+                }
+                
+                result["comparison_with_baseline"] = comparison
         except Exception as e:
             import traceback
             result["comparison_error"] = str(e)
@@ -533,10 +718,10 @@ def get_transfer_value_predictions():
         
         if not analysis_files:
             # No analysis files found, let's run the analysis
-            import train_with_new_data
-            analysis_success = train_with_new_data.run_analysis()
+            import unified_ml_model
+            analysis_results = unified_ml_model.analyze_transfer_values()
             
-            if not analysis_success:
+            if analysis_results is None:
                 return jsonify({"error": "Failed to generate transfer value analysis"}), 500
                 
             # Check again for analysis files
@@ -561,6 +746,27 @@ def get_transfer_value_predictions():
         fair_value_players = analysis.get('fair_value', [])
         all_players = analysis.get('all_players', [])
         stats = analysis.get('stats', {})
+        
+        # Enhance players with additional stats if missing
+        if all_players:
+            # Get player data from database for the current season
+            player_data = db.get_players_with_stats()
+            
+            # Create a dictionary to map player IDs to their stat data
+            player_stats = {}
+            for _, player in player_data.iterrows():
+                player_id = player.get('id')
+                if player_id is not None:
+                    player_stats[player_id] = player.to_dict()
+            
+            # Enhance each player with additional stats if missing
+            for player in all_players:
+                player_id = player.get('id')
+                if player_id in player_stats:
+                    # Add missing stats
+                    for stat in ['goals', 'assists', 'xg', 'xa', 'sca', 'gca', 'tackles', 'interceptions', 'performance_score']:
+                        if stat not in player and stat in player_stats[player_id]:
+                            player[stat] = player_stats[player_id][stat]
         
         # Get query parameters
         status_filter = request.args.get('status', '').lower()  # 'undervalued', 'overvalued', 'fair'
@@ -595,7 +801,8 @@ def get_transfer_value_predictions():
                 "position": position
             },
             "stats": stats,
-            "analysis_date": os.path.basename(latest_analysis).split('_', 1)[1].split('.')[0],  # Extract timestamp from filename
+            "analysis_date": analysis.get("analysis_date", 
+                             os.path.basename(latest_analysis).split('_', 1)[1].split('.')[0]),  # Extract timestamp
             "players": sorted_players
         }
         
@@ -612,8 +819,8 @@ def get_transfer_value_predictions():
 def analyze_transfer_values():
     """Run analysis on market values to find undervalued and overvalued players"""
     try:
-        # Import and run analysis
-        import train_with_new_data
+        # Import unified ML module
+        import unified_ml_model
         
         # Get force parameter (to force retraining)
         from flask import request
@@ -621,7 +828,8 @@ def analyze_transfer_values():
         
         if force:
             # If force is true, always run a new analysis
-            analysis_success = train_with_new_data.run_analysis()
+            analysis_results = unified_ml_model.analyze_transfer_values()
+            analysis_success = analysis_results is not None
         else:
             # Check if we have a recent analysis (less than 1 hour old)
             METRICS_DIR = os.path.join(os.path.dirname(__file__), 'metrics')
@@ -629,7 +837,8 @@ def analyze_transfer_values():
             
             if not analysis_files:
                 # No analysis files found, run the analysis
-                analysis_success = train_with_new_data.run_analysis()
+                analysis_results = unified_ml_model.analyze_transfer_values()
+                analysis_success = analysis_results is not None
             else:
                 # Get the most recent analysis file
                 latest_analysis = max(
@@ -643,7 +852,8 @@ def analyze_transfer_values():
                 
                 if age_in_hours > 1:
                     # Analysis is more than 1 hour old, run a new one
-                    analysis_success = train_with_new_data.run_analysis()
+                    analysis_results = unified_ml_model.analyze_transfer_values()
+                    analysis_success = analysis_results is not None
                 else:
                     # Analysis is recent, use it
                     analysis_success = True
@@ -666,8 +876,8 @@ def analyze_transfer_values():
 def compare_players():
     """Compare players within the same position and age group"""
     try:
-        # Import ML module and request
-        import ml_model
+        # Import unified ML module and request
+        import unified_ml_model
         from flask import request
         
         # Get query parameters
@@ -679,7 +889,7 @@ def compare_players():
             return jsonify({"error": "At least one filter parameter (position, age_group, or player_id) is required"}), 400
         
         # Get predictions with position and age adjustments
-        predictions = ml_model.predict_current_values(
+        predictions = unified_ml_model.predict_current_values(
             position_specific=True,
             age_adjusted=True
         )
@@ -692,7 +902,7 @@ def compare_players():
             if position in predictions['position'].values:
                 # Exact position match
                 predictions = predictions[predictions['position'] == position]
-            elif position in predictions['position_category'].values:
+            elif 'position_category' in predictions.columns and position in predictions['position_category'].values:
                 # Position category match
                 predictions = predictions[predictions['position_category'] == position]
             else:
@@ -700,6 +910,14 @@ def compare_players():
         
         # Filter by age group if specified
         if age_group:
+            if 'age_group' not in predictions.columns:
+                # Create age groups if not present
+                predictions['age_group'] = pd.cut(
+                    predictions['age'], 
+                    bins=[15, 21, 25, 29, 33, 40], 
+                    labels=['youth', 'developing', 'prime', 'experienced', 'veteran']
+                )
+                
             if age_group not in predictions['age_group'].values:
                 return jsonify({"error": f"Age group '{age_group}' not found"}), 404
             predictions = predictions[predictions['age_group'] == age_group]
@@ -713,6 +931,15 @@ def compare_players():
                 if reference_player.empty:
                     return jsonify({"error": f"Player with ID {player_id} not found"}), 404
                 reference_player = reference_player.iloc[0].to_dict()
+                
+                # Convert any non-serializable values
+                for k, v in list(reference_player.items()):
+                    if isinstance(v, (pd.Series, pd.DataFrame)):
+                        reference_player[k] = None
+                    elif isinstance(v, np.ndarray):
+                        reference_player[k] = v.tolist()
+                    elif isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        reference_player[k] = None
             except ValueError:
                 return jsonify({"error": f"Invalid player ID: {player_id}"}), 400
         
