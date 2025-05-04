@@ -418,3 +418,105 @@ if not is_database_populated():
     create_database()
     populate_database()
     print("Database created and populated with simulated player data")
+def get_players_with_market_value_history(player_id=None, current_season="2023-2024"):
+    """Retrieve players with their market value history across seasons
+    
+    Args:
+        player_id (int): Optional player ID to filter by
+        current_season (str): Current season to use as reference
+        
+    Returns:
+        pd.DataFrame: Player data with market value history
+    """
+    conn = sqlite3.connect(DB_PATH)
+    
+    # Build the base player data query
+    base_query = f'''
+    SELECT 
+        p.id, p.name, p.age, p.nationality, p.position, p.club, p.league, 
+        p.market_value,
+        ps.goals, ps.assists, ps.xg, ps.xa, ps.npxg, ps.sca, ps.gca,
+        ps.shots, ps.shots_on_target, ps.progressive_carries, ps.progressive_passes,
+        ps.penalty_box_touches, ps.passes_completed, ps.passes_attempted,
+        ps.pass_completion_pct, ps.progressive_passes_received,
+        ps.final_third_passes_completed, ps.final_third_passes_attempted,
+        ps.dribbles_completed, ps.dribbles_attempted, ps.ball_recoveries,
+        ps.tackles, ps.tackles_won, ps.interceptions, ps.blocks, ps.clearances,
+        ps.pressures, ps.pressure_success_rate, ps.aerial_duels_won,
+        ps.aerial_duels_total, ps.minutes_played, ps.games_played,
+        ps.distance_covered, ps.high_intensity_runs, ps.yellow_cards, ps.red_cards,
+        ps.goals_per90, ps.assists_per90, ps.xg_per90, ps.xa_per90,
+        ps.npxg_per90, ps.sca_per90, ps.gca_per90
+    FROM players p
+    LEFT JOIN player_stats ps ON p.id = ps.player_id AND ps.season = '{current_season}'
+    '''
+    
+    # Add player_id filter if provided
+    if player_id:
+        base_query += f" WHERE p.id = {player_id}"
+    
+    # Get base player data
+    base_df = pd.read_sql_query(base_query, conn)
+    
+    if base_df.empty:
+        conn.close()
+        return pd.DataFrame()
+    
+    # Get market value history for all seasons
+    market_values_query = f'''
+    SELECT 
+        player_id, 
+        season, 
+        market_value
+    FROM player_market_values
+    '''
+    
+    if player_id:
+        market_values_query += f" WHERE player_id = {player_id}"
+    
+    market_values_df = pd.read_sql_query(market_values_query, conn)
+    
+    if market_values_df.empty:
+        conn.close()
+        return base_df
+    
+    # Pivot the market values to get a column for each season
+    pivoted_values = market_values_df.pivot(
+        index='player_id', 
+        columns='season', 
+        values='market_value'
+    ).reset_index()
+    
+    # Rename the season columns
+    for col in pivoted_values.columns:
+        if col != 'player_id':
+            pivoted_values.rename(columns={col: f'market_value_{col.replace("-", "_")}'}, inplace=True)
+    
+    # Merge base data with market value history
+    result_df = base_df.merge(pivoted_values, left_on='id', right_on='player_id', how='left')
+    
+    # Calculate value growth metrics
+    # 1-year growth (previous season to current)
+    prev_season = "2022_2023"  # Example: for current_season="2023-2024"
+    
+    if f'market_value_{prev_season}' in result_df.columns:
+        result_df['value_growth_1yr'] = result_df.apply(
+            lambda row: ((row['market_value'] - row[f'market_value_{prev_season}']) / row[f'market_value_{prev_season}'] * 100) 
+            if pd.notnull(row['market_value']) and pd.notnull(row[f'market_value_{prev_season}']) and row[f'market_value_{prev_season}'] > 0 
+            else 0,
+            axis=1
+        )
+    
+    # 3-year growth
+    season_3yr_ago = "2020_2021"  # Example: for current_season="2023-2024"
+    
+    if f'market_value_{season_3yr_ago}' in result_df.columns:
+        result_df['value_growth_3yr'] = result_df.apply(
+            lambda row: ((row['market_value'] - row[f'market_value_{season_3yr_ago}']) / row[f'market_value_{season_3yr_ago}'] * 100)
+            if pd.notnull(row['market_value']) and pd.notnull(row[f'market_value_{season_3yr_ago}']) and row[f'market_value_{season_3yr_ago}'] > 0
+            else 0,
+            axis=1
+        )
+    
+    conn.close()
+    return result_df

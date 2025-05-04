@@ -35,6 +35,11 @@ src/models/*.json
 src/models/*.csv
 src/models/*.png
 
+# Metrics and analysis results
+src/metrics/*.json
+src/metrics/archive/
+src/logs/
+
 # Data files
 *.csv
 *.parquet
