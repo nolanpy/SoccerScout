@@ -4,66 +4,94 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SoccerScout - Player Analysis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #3498db;
-      --secondary: #2c3e50;
-      --success: #2ecc71;
-      --danger: #e74c3c;
-      --warning: #f39c12;
+      --primary: #4a6fa5;
+      --secondary: #1a3a5f;
+      --success: #28a745;
+      --danger: #dc3545;
+      --warning: #ffc107;
       --light: #f8f9fa;
-      --dark: #343a40;
+      --dark: #233447;
+      --undervalued: #d4edda;
+      --undervalued-text: #155724;
+      --overvalued: #f8d7da;
+      --overvalued-text: #721c24;
+      --fair-valued: #fff3cd;
+      --fair-valued-text: #856404;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
     }
     
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 0;
-      background-color: #f5f7fa;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: #f8fafc;
       color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
     
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
+      width: 95%;
       margin: 0 auto;
       padding: 20px;
+      flex: 1;
     }
     
     .header {
       background-color: var(--dark);
       color: white;
-      padding: 15px 0;
+      padding: 18px 0;
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       border-bottom: 4px solid var(--primary);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
     
     .header h1 {
       margin: 0;
       font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
     
     .tabs {
       display: flex;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       border-bottom: 1px solid #ddd;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 5px;
     }
     
     .tab {
       padding: 12px 20px;
       cursor: pointer;
-      border-radius: 5px 5px 0 0;
-      transition: all 0.3s ease;
+      border-radius: 6px;
+      transition: all 0.25s ease;
+      font-weight: 500;
+      margin: 0 5px;
     }
     
     .tab.active {
       background-color: var(--primary);
       color: white;
-      border-bottom: 2px solid transparent;
     }
     
     .tab:hover:not(.active) {
-      background-color: #e9ecef;
+      background-color: var(--light);
     }
     
     .tab-content {
@@ -76,16 +104,17 @@
     
     .card {
       background: white;
-      border-radius: 8px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       padding: 20px;
       margin-bottom: 20px;
-      transition: transform 0.3s ease;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(0,0,0,0.03);
     }
     
     .card:hover {
       transform: translateY(-5px);
-      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.08);
     }
     
     .card-header {
@@ -94,24 +123,28 @@
       align-items: center;
       margin-bottom: 15px;
       border-bottom: 1px solid #eee;
-      padding-bottom: 10px;
+      padding-bottom: 12px;
     }
     
     .card-title {
       margin: 0;
       font-size: 18px;
       font-weight: 600;
+      color: var(--secondary);
     }
     
     .player-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 20px;
+      width: 100%;
     }
     
     .player-card {
       display: flex;
       flex-direction: column;
+      width: 100%;
+      box-sizing: border-box;
     }
     
     .player-header {
@@ -138,6 +171,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 8px;
       margin-top: 10px;
+      width: 100%;
     }
     
     .stat-item {
@@ -165,25 +199,27 @@
     
     .value-indicator {
       display: inline-block;
-      padding: 3px 6px;
-      border-radius: 4px;
+      padding: 4px 10px;
+      border-radius: 12px;
       font-size: 12px;
-      font-weight: bold;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
     .undervalued {
-      background-color: #d4edda;
-      color: #155724;
+      background-color: var(--undervalued);
+      color: var(--undervalued-text);
     }
     
     .overvalued {
-      background-color: #f8d7da;
-      color: #721c24;
+      background-color: var(--overvalued);
+      color: var(--overvalued-text);
     }
     
     .fairly-valued {
-      background-color: #fff3cd;
-      color: #856404;
+      background-color: var(--fair-valued);
+      color: var(--fair-valued-text);
     }
     
     .loading {
@@ -225,12 +261,14 @@
     }
     
     .btn {
-      padding: 8px 16px;
+      padding: 10px 18px;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
-      font-weight: 500;
-      transition: background-color 0.3s;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      letter-spacing: 0.3px;
     }
     
     .btn-primary {
@@ -239,12 +277,34 @@
     }
     
     .btn-primary:hover {
-      background-color: #2980b9;
+      background-color: var(--secondary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     }
     
     .btn-sm {
-      padding: 4px 8px;
+      padding: 6px 12px;
       font-size: 12px;
+      border-radius: 4px;
+    }
+    
+    .filter-btn {
+      padding: 8px 16px;
+      border-radius: 20px;
+      transition: all 0.2s ease;
+      font-size: 13px;
+      background-color: white;
+      border: 1px solid #e0e0e0;
+      color: #555;
+    }
+    
+    .filter-btn:hover:not(.active) {
+      background-color: #f5f5f5;
+      border-color: #ccc;
+    }
+    
+    .filter-btn.active {
+      border: none;
     }
     
     footer {
@@ -253,6 +313,7 @@
       background-color: var(--dark);
       color: white;
       font-size: 14px;
+      margin-top: auto;
     }
   </style>
 </head>
@@ -263,8 +324,7 @@
   
   <div class="container">
     <div class="tabs">
-      <div class="tab active" data-tab="all-players">All Players</div>
-      <div class="tab" data-tab="undervalued">Top Undervalued</div>
+      <div class="tab active" data-tab="transfer-analysis">Player Value Analysis</div>
       <div class="tab" data-tab="distributions">Stat Distributions</div>
     </div>
     
@@ -272,24 +332,20 @@
       <input type="text" id="player-search" placeholder="Search players by name, club, or position...">
     </div>
     
-    <div id="all-players" class="tab-content active">
+    <div id="transfer-analysis" class="tab-content active">
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">All Players Ranked</h2>
+          <h2 class="card-title">Player Value Analysis</h2>
+          <button class="btn btn-primary" id="refresh-analysis">Refresh Analysis</button>
         </div>
-        <div id="player-grid" class="player-grid">
-          <div class="loading">Loading player data...</div>
+        <div class="value-filters" style="margin-bottom: 25px; display: flex; gap: 10px; background-color: white; padding: 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+          <button class="filter-btn btn-primary active" data-filter="all">All Players</button>
+          <button class="filter-btn" data-filter="undervalued" style="background-color: var(--undervalued); color: var(--undervalued-text);">Undervalued</button>
+          <button class="filter-btn" data-filter="overvalued" style="background-color: var(--overvalued); color: var(--overvalued-text);">Overvalued</button>
+          <button class="filter-btn" data-filter="fair" style="background-color: var(--fair-valued); color: var(--fair-valued-text);">Fair Value</button>
         </div>
-      </div>
-    </div>
-    
-    <div id="undervalued" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Top Undervalued Players</h2>
-        </div>
-        <div id="undervalued-grid" class="player-grid">
-          <div class="loading">Loading undervalued players...</div>
+        <div id="transfer-analysis-grid" class="player-grid">
+          <div class="loading">Loading transfer value analysis...</div>
         </div>
       </div>
     </div>
@@ -321,17 +377,27 @@
         // Add active class to clicked tab and corresponding content
         tab.classList.add('active');
         document.getElementById(tab.dataset.tab).classList.add('active');
+        
+        // Reinitialize search when switching tabs
+        initializeSearch();
+        
+        // Clear search field when switching tabs
+        document.getElementById('player-search').value = '';
       });
     });
     
     // Format currency
     function formatCurrency(value) {
+      if (value === null || value === undefined || isNaN(value) || value === 0) {
+        return '€0.0M';
+      }
       const mill = value / 1000000;
       return '€' + mill.toFixed(1) + 'M';
     }
     
     // Get value indicator class
     function getValueIndicatorClass(ratio) {
+      if (!ratio || isNaN(ratio)) return 'fairly-valued';
       if (ratio > 1.5) return 'undervalued';
       if (ratio < 0.7) return 'overvalued';
       return 'fairly-valued';
@@ -339,155 +405,260 @@
     
     // Get value text
     function getValueText(ratio) {
+      if (!ratio || isNaN(ratio)) return 'Fair Value';
       if (ratio > 1.5) return 'Undervalued';
       if (ratio < 0.7) return 'Overvalued';
       return 'Fair Value';
     }
     
-    // Fetch and display all players
-    fetch('/players')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(players => {
-        const playerGrid = document.getElementById('player-grid');
-        playerGrid.innerHTML = ''; // Clear loading
-        
-        if (players.length === 0) {
-          playerGrid.innerHTML = '<div class="error">No player data available</div>';
-          return;
-        }
-        
-        players.forEach(player => {
-          const valueClass = getValueIndicatorClass(player.value_ratio);
-          const valueText = getValueText(player.value_ratio);
-          
-          const playerCard = document.createElement('div');
-          playerCard.className = 'card player-card';
-          playerCard.innerHTML = `
-            <div class="player-header">
-              <div>
-                <div class="player-name">${player.name}</div>
-                <div class="player-meta">
-                  <span>${player.age} years | ${player.position} | ${player.club}</span>
-                  <span class="value-indicator ${valueClass}">${valueText}</span>
-                </div>
-              </div>
-            </div>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-name">Performance Score</span>
-                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Market Value</span>
-                <span class="stat-value">${formatCurrency(player.market_value)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Goals</span>
-                <span class="stat-value">${player.goals}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Assists</span>
-                <span class="stat-value">${player.assists}</span>
-              </div>
-            </div>
-            <div class="player-details" id="details-${player.id}">
-              <div class="stats-grid" style="margin-top: 15px;">
-                <div class="stat-item">
-                  <span class="stat-name">xG</span>
-                  <span class="stat-value">${player.xg.toFixed(2)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">xA</span>
-                  <span class="stat-value">${player.xa.toFixed(2)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">SCA</span>
-                  <span class="stat-value">${player.sca}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">GCA</span>
-                  <span class="stat-value">${player.gca}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">Tackles</span>
-                  <span class="stat-value">${player.tackles}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-name">Interceptions</span>
-                  <span class="stat-value">${player.interceptions}</span>
-                </div>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-sm" style="margin-top: 10px;" 
-              onclick="toggleDetails(${player.id})">Show Details</button>
-          `;
-          playerGrid.appendChild(playerCard);
-        });
-        
-        // Initialize search functionality after loading players
-        initializeSearch();
-      })
-      .catch(error => {
-        document.getElementById('player-grid').innerHTML = 
-          `<div class="error">Error loading player data: ${error.message}</div>`;
-      });
+    // Initialize search functionality after content loads
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeSearch();
+    });
     
-    // Fetch and display undervalued players
-    fetch('/top-undervalued')
+    // Fetch and display transfer value analysis
+    fetch('/transfer-value-predictions')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
         return response.json();
       })
-      .then(players => {
-        const undervaluedGrid = document.getElementById('undervalued-grid');
-        undervaluedGrid.innerHTML = ''; // Clear loading
+      .then(data => {
+        const analysisGrid = document.getElementById('transfer-analysis-grid');
+        analysisGrid.innerHTML = ''; // Clear loading
         
-        if (players.length === 0) {
-          undervaluedGrid.innerHTML = '<div class="error">No undervalued player data available</div>';
+        if (!data.players || data.players.length === 0) {
+          analysisGrid.innerHTML = '<div class="error">No transfer value analysis data available</div>';
           return;
         }
         
-        players.forEach(player => {
-          const playerCard = document.createElement('div');
-          playerCard.className = 'card player-card';
-          playerCard.innerHTML = `
-            <div class="player-header">
-              <div>
-                <div class="player-name">${player.name}</div>
-                <div class="player-meta">
-                  <span>${player.age} years | ${player.position} | ${player.club}</span>
-                  <span class="value-indicator undervalued">Undervalued</span>
+        // Set up analysis info card
+        const infoCard = document.createElement('div');
+        infoCard.className = 'card';
+        infoCard.style.marginBottom = '20px';
+        
+        // Create analysis header with date and refresh info
+        let analysisHeaderHTML = `
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 18px;">Transfer Value Analysis</h3>
+            <div style="font-size: 14px; color: #666;">
+              <strong>Analysis Date:</strong> ${data.analysis_date}
+            </div>
+          </div>
+        `;
+        
+        // Create analysis stats summary
+        let statsHTML = '';
+        if (data.stats) {
+          statsHTML = `
+            <div style="padding: 15px;">
+              <div class="stats-summary" style="display: flex; text-align: center; justify-content: space-between; margin: 0 -5px;">
+                <div class="stat-box" style="width: calc(25% - 10px); margin: 0 5px; background: var(--light); padding: 12px 8px; border-radius: 6px;">
+                  <div style="font-size: 22px; font-weight: bold;">${data.stats.total_players}</div>
+                  <div style="font-size: 12px; color: #666; white-space: nowrap;">Total Players</div>
+                </div>
+                <div class="stat-box" style="width: calc(25% - 10px); margin: 0 5px; background: var(--undervalued); padding: 12px 8px; border-radius: 6px;">
+                  <div style="font-size: 22px; font-weight: bold; color: var(--undervalued-text);">${data.stats.undervalued_count}</div>
+                  <div style="font-size: 12px; color: var(--undervalued-text); white-space: nowrap;">Undervalued</div>
+                </div>
+                <div class="stat-box" style="width: calc(25% - 10px); margin: 0 5px; background: var(--overvalued); padding: 12px 8px; border-radius: 6px;">
+                  <div style="font-size: 22px; font-weight: bold; color: var(--overvalued-text);">${data.stats.overvalued_count}</div>
+                  <div style="font-size: 12px; color: var(--overvalued-text); white-space: nowrap;">Overvalued</div>
+                </div>
+                <div class="stat-box" style="width: calc(25% - 10px); margin: 0 5px; background: var(--fair-valued); padding: 12px 8px; border-radius: 6px;">
+                  <div style="font-size: 22px; font-weight: bold; color: var(--fair-valued-text);">${data.stats.fair_value_count}</div>
+                  <div style="font-size: 12px; color: var(--fair-valued-text); white-space: nowrap;">Fair Value</div>
                 </div>
               </div>
             </div>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-name">Performance Score</span>
-                <span class="stat-value highlight">${player.performance_score.toFixed(2)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Market Value</span>
-                <span class="stat-value">${formatCurrency(player.market_value)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-name">Value Ratio</span>
-                <span class="stat-value highlight">${player.value_ratio.toFixed(2)}</span>
-              </div>
-            </div>
           `;
-          undervaluedGrid.appendChild(playerCard);
+        }
+        
+        infoCard.innerHTML = analysisHeaderHTML + statsHTML;
+        analysisGrid.appendChild(infoCard);
+        
+        // Store all players for filtering
+        const allPlayers = data.players;
+        
+        // Function to render players based on filter
+        function renderPlayers(players) {
+          // Clear previous players
+          const existingCards = analysisGrid.querySelectorAll('.player-card');
+          existingCards.forEach(card => card.remove());
+          
+          players.forEach(player => {
+            const valueClass = getValueIndicatorClass(player.value_ratio);
+            const valueText = getValueText(player.value_ratio);
+            
+            const playerCard = document.createElement('div');
+            playerCard.className = 'card player-card';
+            playerCard.innerHTML = `
+              <div class="player-header">
+                <div style="width: 100%;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <div class="player-name">${player.name}</div>
+                    <span class="value-indicator ${valueClass}" style="margin-left: auto;">${valueText}</span>
+                  </div>
+                  <div class="player-meta" style="margin-top: 2px;">
+                    <span>${player.age} years | ${player.position} | ${player.club}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <span class="stat-name">Performance</span>
+                  <span class="stat-value highlight">${player.performance_score !== null && !isNaN(player.performance_score) ? player.performance_score.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Market Value</span>
+                  <span class="stat-value">${formatCurrency(player.market_value)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Predicted Value</span>
+                  <span class="stat-value">${formatCurrency(player.predicted_value)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Value Difference</span>
+                  <span class="stat-value ${player.value_difference && player.value_difference > 0 ? 'highlight' : ''}">${formatCurrency(player.value_difference || 0)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-name">Value Ratio</span>
+                  <span class="stat-value ${valueClass === 'undervalued' ? 'highlight' : ''}">${player.value_ratio !== null && !isNaN(player.value_ratio) ? player.value_ratio.toFixed(2) : '0.00'}x</span>
+                </div>
+              </div>
+              <div class="player-details" id="details-${player.id}">
+                <div class="stats-grid" style="margin-top: 15px;">
+                  <div class="stat-item">
+                    <span class="stat-name">Goals</span>
+                    <span class="stat-value">${player.goals !== undefined ? player.goals : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Assists</span>
+                    <span class="stat-value">${player.assists !== undefined ? player.assists : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">xG</span>
+                    <span class="stat-value">${player.xg !== null && !isNaN(player.xg) ? player.xg.toFixed(2) : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">xA</span>
+                    <span class="stat-value">${player.xa !== null && !isNaN(player.xa) ? player.xa.toFixed(2) : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">SCA</span>
+                    <span class="stat-value">${player.sca !== null && !isNaN(player.sca) ? player.sca : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">GCA</span>
+                    <span class="stat-value">${player.gca !== null && !isNaN(player.gca) ? player.gca : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Tackles</span>
+                    <span class="stat-value">${player.tackles !== null && !isNaN(player.tackles) ? player.tackles : 'N/A'}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-name">Interceptions</span>
+                    <span class="stat-value">${player.interceptions !== null && !isNaN(player.interceptions) ? player.interceptions : 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm" style="margin-top: 10px;" 
+                onclick="toggleDetails(${player.id})">Show Details</button>
+            `;
+            analysisGrid.appendChild(playerCard);
+          });
+          
+          if (players.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'card';
+            noResults.innerHTML = '<div class="error">No players match the selected filter</div>';
+            analysisGrid.appendChild(noResults);
+          }
+        }
+        
+        // Initial render of all players
+        renderPlayers(allPlayers);
+        
+        // Add event listeners to filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            // Remove active class from all buttons
+            document.querySelectorAll('.filter-btn').forEach(b => {
+              b.classList.remove('active');
+              // Reset specific filter styles
+              if (b.dataset.filter === 'undervalued') {
+                b.style.backgroundColor = 'var(--undervalued)';
+                b.style.color = 'var(--undervalued-text)';
+              } else if (b.dataset.filter === 'overvalued') {
+                b.style.backgroundColor = 'var(--overvalued)';
+                b.style.color = 'var(--overvalued-text)';
+              } else if (b.dataset.filter === 'fair') {
+                b.style.backgroundColor = 'var(--fair-valued)';
+                b.style.color = 'var(--fair-valued-text)';
+              } else if (b.dataset.filter === 'all') {
+                b.classList.remove('btn-primary');
+                b.style.backgroundColor = '';
+                b.style.color = '';
+              }
+            });
+            
+            // Add active class to clicked button
+            btn.classList.add('active');
+            
+            // Apply specific active style based on filter type
+            if (btn.dataset.filter === 'all') {
+              btn.classList.add('btn-primary');
+            } else if (btn.dataset.filter === 'undervalued') {
+              btn.style.backgroundColor = 'var(--success)';
+              btn.style.color = 'white';
+            } else if (btn.dataset.filter === 'overvalued') {
+              btn.style.backgroundColor = 'var(--danger)';
+              btn.style.color = 'white';
+            } else if (btn.dataset.filter === 'fair') {
+              btn.style.backgroundColor = 'var(--warning)';
+              btn.style.color = 'white';
+            }
+            
+            // Apply filter
+            const filter = btn.dataset.filter;
+            let filteredPlayers;
+            
+            if (filter === 'undervalued') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Undervalued');
+            } else if (filter === 'overvalued') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Overvalued');
+            } else if (filter === 'fair') {
+              filteredPlayers = allPlayers.filter(p => p.status === 'Fair Value');
+            } else {
+              filteredPlayers = allPlayers;
+            }
+            
+            renderPlayers(filteredPlayers);
+          });
+        });
+        
+        // Add refresh functionality
+        document.getElementById('refresh-analysis').addEventListener('click', () => {
+          fetch('/analyze-transfer-values?force=true')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(result => {
+              // Reload the page to see fresh results
+              window.location.reload();
+            })
+            .catch(error => {
+              alert(`Error refreshing analysis: ${error.message}`);
+            });
         });
       })
       .catch(error => {
-        document.getElementById('undervalued-grid').innerHTML = 
-          `<div class="error">Error loading undervalued player data: ${error.message}</div>`;
+        document.getElementById('transfer-analysis-grid').innerHTML = 
+          `<div class="error">Error loading transfer value analysis: ${error.message}</div>`;
       });
     
     // Fetch and display stat distributions
@@ -510,8 +681,24 @@
         // Create a grid layout for stats
         const statsGrid = document.createElement('div');
         statsGrid.style.display = 'grid';
-        statsGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+        statsGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
         statsGrid.style.gap = '20px';
+        statsGrid.style.width = '100%';
+        
+        // Group metrics by category
+        const metricCategories = {
+          'Attacking': ['goals', 'assists', 'xg', 'xa', 'shots', 'shots_on_target'],
+          'Playmaking': ['sca', 'gca', 'progressive_passes', 'pass_completion_pct'],
+          'Defending': ['tackles', 'interceptions', 'aerial_duels_won', 'pressures']
+        };
+        
+        // Create inverse mapping for categorization
+        const metricCategoryMap = {};
+        Object.entries(metricCategories).forEach(([category, metrics]) => {
+          metrics.forEach(metric => {
+            metricCategoryMap[metric] = category;
+          });
+        });
         
         // Add each stat distribution
         for (const [metric, data] of Object.entries(distributions)) {
@@ -523,20 +710,64 @@
             .replace(/_/g, ' ')
             .replace(/\b\w/g, l => l.toUpperCase());
           
+          // Determine category (default to "Other")
+          const category = metricCategoryMap[metric] || "Other";
+          const categoryColor = category === 'Attacking' ? '#e8f4fc' : 
+                               category === 'Playmaking' ? '#e8f8e8' : 
+                               category === 'Defending' ? '#fef5e8' : '#f8f9fa';
+          
           statCard.innerHTML = `
-            <h3>${displayName}</h3>
-            <div>
-              <p><strong>Range:</strong> ${data.min.toFixed(2)} - ${data.max.toFixed(2)}</p>
-              <p><strong>Average:</strong> ${data.mean.toFixed(2)}</p>
-              <p><strong>Median:</strong> ${data.median.toFixed(2)}</p>
-              <p><strong>Percentiles:</strong></p>
-              <ul>
-                <li>10th: ${data.percentiles['10'].toFixed(2)}</li>
-                <li>25th: ${data.percentiles['25'].toFixed(2)}</li>
-                <li>50th: ${data.percentiles['50'].toFixed(2)}</li>
-                <li>75th: ${data.percentiles['75'].toFixed(2)}</li>
-                <li>90th: ${data.percentiles['90'].toFixed(2)}</li>
-              </ul>
+            <div class="card-header" style="background-color: ${categoryColor}; border-bottom: 1px solid #eee; padding: 10px; margin: -20px -20px 15px -20px; border-radius: 8px 8px 0 0;">
+              <h3 style="margin: 0; font-size: 16px; color: var(--secondary);">${displayName}</h3>
+              <div style="font-size: 12px; color: #666;">${category}</div>
+            </div>
+            
+            <div style="display: flex; margin-bottom: 15px;">
+              <div style="flex: 1; text-align: center;">
+                <div style="font-size: 12px; color: #666;">Average</div>
+                <div style="font-size: 18px; font-weight: bold;">${data.mean.toFixed(2)}</div>
+              </div>
+              <div style="flex: 1; text-align: center;">
+                <div style="font-size: 12px; color: #666;">Median</div>
+                <div style="font-size: 18px; font-weight: bold;">${data.median.toFixed(2)}</div>
+              </div>
+              <div style="flex: 1; text-align: center;">
+                <div style="font-size: 12px; color: #666;">Range</div>
+                <div style="font-size: 14px; font-weight: bold;">${data.min.toFixed(1)} - ${data.max.toFixed(1)}</div>
+              </div>
+            </div>
+            
+            <div style="margin-top: 15px;">
+              <div style="font-size: 13px; color: #666; margin-bottom: 8px;">Percentiles</div>
+              
+              <!-- Main percentile bar background -->
+              <div style="height: 8px; background: #eee; border-radius: 4px; margin-bottom: 15px; position: relative; overflow: hidden;">
+                <!-- Colored percentile sections -->
+                <div style="position: absolute; left: 0%; width: 10%; height: 100%; background-color: #f8f9fb;"></div>
+                <div style="position: absolute; left: 10%; width: 15%; height: 100%; background-color: #e8edf5;"></div>
+                <div style="position: absolute; left: 25%; width: 25%; height: 100%; background-color: #d5e1ef;"></div>
+                <div style="position: absolute; left: 50%; width: 25%; height: 100%; background-color: #c2d5e9;"></div>
+                <div style="position: absolute; left: 75%; width: 15%; height: 100%; background-color: #afc8e2;"></div>
+                <div style="position: absolute; left: 90%; width: 10%; height: 100%; background-color: #9cc0dc;"></div>
+                
+                <!-- Marker lines -->
+                <div style="position: absolute; left: 10%; top: 0; width: 1px; height: 100%; background: #999;"></div>
+                <div style="position: absolute; left: 25%; top: 0; width: 1px; height: 100%; background: #999;"></div>
+                <div style="position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: #999;"></div>
+                <div style="position: absolute; left: 75%; top: 0; width: 1px; height: 100%; background: #999;"></div>
+                <div style="position: absolute; left: 90%; top: 0; width: 1px; height: 100%; background: #999;"></div>
+                
+                <!-- Value indicator -->
+                <div style="position: absolute; left: calc(${data.mean / data.max * 100}% - 4px); top: -4px; width: 8px; height: 16px; background: var(--primary); border-radius: 4px; transform: rotate(45deg);"></div>
+              </div>
+              
+              <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
+                <div>10% <span style="font-weight: bold;">${data.percentiles['10'].toFixed(1)}</span></div>
+                <div>25% <span style="font-weight: bold;">${data.percentiles['25'].toFixed(1)}</span></div>
+                <div>50% <span style="font-weight: bold;">${data.percentiles['50'].toFixed(1)}</span></div>
+                <div>75% <span style="font-weight: bold;">${data.percentiles['75'].toFixed(1)}</span></div>
+                <div>90% <span style="font-weight: bold;">${data.percentiles['90'].toFixed(1)}</span></div>
+              </div>
             </div>
           `;
           statsGrid.appendChild(statCard);
@@ -566,10 +797,13 @@
     // Initialize search functionality
     function initializeSearch() {
       const searchInput = document.getElementById('player-search');
-      const playerCards = document.querySelectorAll('.player-card');
       
       searchInput.addEventListener('input', () => {
         const searchTerm = searchInput.value.toLowerCase();
+        
+        // Find all player cards in the currently active tab
+        const activeTab = document.querySelector('.tab-content.active');
+        const playerCards = activeTab.querySelectorAll('.player-card');
         
         playerCards.forEach(card => {
           const playerText = card.textContent.toLowerCase();

@@ -1,12 +1,12 @@
 # SoccerScout
 
-SoccerScout is a tool for soccer clubs to identify undervalued and overvalued players by analyzing advanced statistics and comparing predicted values to actual market values.
+SoccerScout is an advanced soccer player analysis and scouting tool that combines data science, machine learning, and web scraping to identify undervalued talent in the soccer market. The application provides comprehensive player statistics, performance metrics, and market value predictions to support recruitment decisions.
 
 ## Next Steps
 
-- [ ] Add ML models to predict market values
-- [ ] Compare predicted vs. actual values
-- [ ] Track prediction accuracy over time
+- [x] Add ML models to predict market values
+- [x] Compare predicted vs. actual values
+- [x] Track prediction accuracy over time
 - [ ] Add more visualization tools
 
 ## Overview
@@ -38,14 +38,21 @@ The current version uses simulated player data in a SQLite database, with plans 
 
 SoccerScout now includes a comprehensive machine learning system to predict player market values and identify undervalued talent:
 
-1. **Position-Specific Models**:
+1. **Unified ML Model**:
+
+   - Centralized machine learning framework in `unified_ml_model.py`
+   - Combines multiple prediction approaches in a single module
+   - Provides consistent API for training, evaluation, and prediction
+   - Handles data preprocessing and feature engineering automatically
+
+2. **Position-Specific Models**:
 
    - Separate models for forwards, midfielders, defenders, and goalkeepers
    - Position-appropriate weighting of statistics (offensive vs. defensive)
    - Accounts for position-specific market dynamics (forwards typically cost more)
    - Falls back to general model when position-specific data is limited
 
-2. **Age-Adjusted Evaluation**:
+3. **Age-Adjusted Evaluation**:
 
    - Incorporates player age into market value predictions
    - Models peak value curve (typically around age 27)
@@ -53,28 +60,35 @@ SoccerScout now includes a comprehensive machine learning system to predict play
    - Accounts for declining values in older players
    - Enables meaningful comparisons between players of different ages
 
-3. **Multiple ML Algorithms**:
+4. **Multiple ML Algorithms**:
 
    - Random Forest Regressor (default)
    - Gradient Boosting Regressor
    - Ridge Regression
    - Lasso Regression
 
-4. **Historical Data Analysis**:
+5. **Historical Data Analysis**:
 
    - Uses 6 seasons of data (2018-2023) to train models
    - Predicts current season (2023-2024) market values
    - Evaluates prediction accuracy season-by-season
    - Improves models by learning from historical trends
 
-5. **Feature Importance Analysis**:
+6. **Feature Importance Analysis**:
 
    - Identifies which statistics most strongly correlate with market value
    - Automatically adjusts statistical weights based on ML insights
    - Generates optimal weights for the player evaluation algorithm
    - Tailors importance by position (goals matter more for forwards, tackles for defenders)
 
-6. **Model Performance Metrics**:
+7. **Value Trajectory Prediction**:
+
+   - Projects player values into future seasons
+   - Considers age progression and position-specific career curves
+   - Identifies players with high growth potential
+   - Helps identify future investment opportunities
+
+8. **Model Performance Metrics**:
    - Mean Absolute Error (MAE)
    - Root Mean Squared Error (RMSE)
    - R² Score (coefficient of determination)
@@ -170,13 +184,30 @@ The system now includes comprehensive tools to track and compare model performan
 
 4. Analyze the metrics to see how your data additions impacted performance
 
+## Time-Series Value Prediction
+
+SoccerScout currently implements season-by-season analytics comparison to predict future values by:
+
+1. Training models on historical seasons (2018-2023) to learn how statistics correlate with market values in those specific seasons
+2. Using the dedicated value trajectory model (`train_value_trajectory_model` method) that analyzes growth patterns across seasons
+3. Calculating 1-year and 3-year value growth metrics to identify trends
+4. Applying position-specific career trajectories with different peak ages and growth curves
+5. Projecting future values through the `predict_future_values` method that simulates season-by-season progression
+6. Incorporating age progression and expected statistical performance evolution
+
+This approach allows the system to understand how a player's statistical profile in a given season translates to market value, and then apply that knowledge to predict future values based on current statistics.
+
 ## Development Goals
 
 1. ✅ Implement ML model to predict player market values
 2. ✅ Use historical data to validate predictions
 3. ✅ Add performance tracking and comparison tools
-4. Add more visualization tools and a dedicated ML dashboard
-5. Incorporate real-world data from soccer APIs
+4. ✅ Develop unified ML model with position-specific and age-adjusted predictions
+5. ✅ Implement value trajectory prediction for future player values
+6. Add more visualization tools and a dedicated ML dashboard
+7. Incorporate additional real-world data from soccer APIs
+8. Enhance the season-to-season statistical improvement analysis to better predict value changes
+9. Develop a "what-if" simulator to project how specific stat improvements would affect a player's market value
 
 ## Dev Guidelines
 
@@ -188,7 +219,7 @@ The system now includes comprehensive tools to track and compare model performan
 1. Install dependencies:
 
    ```
-   pip install flask flask_cors pandas
+   pip install flask flask_cors pandas numpy scikit-learn beautifulsoup4 requests
    ```
 
 2. Run the application:
@@ -200,7 +231,16 @@ The system now includes comprehensive tools to track and compare model performan
 
 3. Access the UI in your browser:
    ```
-   http://127.0.0.1:5000/
+   http://127.0.0.1:5000/players
+   ```
+
+4. Development commands:
+   ```
+   # Lint code
+   pip install flake8 && flake8 src/
+
+   # Format code
+   pip install black && black src/
    ```
 
 ## API Endpoints
@@ -216,6 +256,10 @@ The system now includes comprehensive tools to track and compare model performan
 
 - `/ml-predictions` - Get market value predictions with position and age adjustments
   - Query params: `position_specific` (true/false), `age_adjusted` (true/false)
+- `/transfer-value-predictions` - Get detailed transfer value analysis with filtering
+  - Query params: `status` (undervalued/overvalued/fair), `position` (e.g., 'CF')
+- `/analyze-transfer-values` - Run a full transfer value analysis to find undervalued and overvalued players
+  - Query params: `force` (true/false) - Force reanalysis even if recent results exist
 - `/compare-players` - Compare players within the same position and/or age group
   - Query params: `position` (e.g., 'CF' or 'forward'), `age_group` (e.g., 'youth', 'prime'), `player_id` (to specify a reference player)
 - `/train-model` - Train the ML model and get performance metrics
@@ -224,6 +268,7 @@ The system now includes comprehensive tools to track and compare model performan
     - `model_type` ('random_forest', 'gradient_boosting', 'ridge', 'lasso')
     - `position_specific` (true/false)
     - `age_adjusted` (true/false)
+    - `time_series` (true/false) - Whether to include time-series features
 - `/compare-models` - Train and compare different ML models (Random Forest, Gradient Boosting, Ridge, Lasso)
 - `/compare-model-runs` - Compare performance metrics between different training runs (e.g., before and after adding more data)
   - Query params:
