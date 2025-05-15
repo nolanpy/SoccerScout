@@ -3,10 +3,18 @@ import pandas as pd
 import numpy as np
 import json
 import math
+import logging
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import database as db
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Custom JSON encoder to handle NumPy types and data cleaning
 class NumpyEncoder(json.JSONEncoder):
